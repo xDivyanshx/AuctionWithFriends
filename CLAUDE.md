@@ -18,9 +18,10 @@ Sport: **Premier League football now.** IPL cricket later as a separate room typ
 
 ## 2. Current Status
 
-- **Phase:** Phase 6 (auction console frontend) complete + verified against the live
-  API and Neon. Phases 4 (backend) and 5 (standings page) complete and verified before it.
-  **The MVP frontend is feature-complete**; what remains is deployment (§5).
+- **Phase:** Phase 7 (deployment) — API and frontend are both live (see the deploy
+  bullet below). Phases 4 (backend), 5 (standings page) and 6 (auction console)
+  complete and verified before it. **The MVP is feature-complete and deployed**;
+  what remains is the daily sync cron and a credential rotation.
 - **What exists:**
   - Solution scaffold: Api (.NET 10), Domain, Infrastructure, Tests
   - All domain entities with updated transaction model (1-for-1 swaps, refund+acquire money)
@@ -42,8 +43,11 @@ Sport: **Premier League football now.** IPL cricket later as a separate room typ
   - **StandingsService**: best-N standings via frozen-points formula
     (`InheritedPoints + current − AcquisitionPoints`), ranks, persists denormalized
     figures; per-participant squad drill-down.
-  - **AdminController**: POST import-fpl, POST sync — both gated by the same
-    `X-Sync-Secret` check (`SYNC_SECRET` env var) via a shared `CheckSyncSecret` helper.
+  - **AdminController**: POST import-fpl (synchronous — blocks until the import
+    finishes, for manual runs), POST sync (202 Accepted + background import, for the
+    timeout-capped cron). Both gated by the same `X-Sync-Secret` check
+    (`SYNC_SECRET` env var) via a shared `CheckSyncSecret` helper, and both behind
+    one single-flight gate so two imports cannot overlap.
   - **PoolsController**: GET pools, GET pool players (search/position/take).
   - **StandingsController**: GET standings, GET participant squad.
   - New rooms auto-link to the shared FPL pool.
@@ -101,9 +105,18 @@ Sport: **Premier League football now.** IPL cricket later as a separate room typ
   consecutive polls after the ordering fix. Undo returns 200 with clean JSON,
   applies the refund, empties `results`, then 400 "Nothing to undo."
   Backend suite 19/19 green; frontend lint and production build clean.
-- **Next:** Deploy (follow `DEPLOY.md`) — Render blueprint first, then Vercel
-  with root dir `frontend`, then set `Cors__AllowedOrigins` to the Vercel origin
-  and redeploy, then the cron-job.org daily sync.
+- **Deployed (2026-08-09).** API on Render at `https://auctionroom-api.onrender.com`
+  (Docker, `development` branch — both hosts default to `main`, which does not exist
+  here); frontend on Vercel at `https://auction-with-friends.vercel.app` with root
+  dir `frontend` and `VITE_API_BASE` inlined at build time; `Cors__AllowedOrigins`
+  set to the Vercel origin. Verified live: `/health` 200, `/api/pools` returns the
+  573-player pool from Neon, admin endpoints 401 without the secret, GET returns 200
+  rather than a 307, and preflight from the Vercel origin (including `x-user-id`)
+  is allowed while a foreign origin is refused.
+- **Next:** create the cron-job.org daily job per `DEPLOY.md` §4 (POST `/api/admin/sync`,
+  `X-Sync-Secret`, ~22:00 IST, free-plan 30s timeout is fine), optionally the 21:55
+  `/health` warm-up, then rotate the Neon `neondb_owner` password and update it in
+  Render + local `dotnet user-secrets`.
 
 ## 3. Finalized Requirements
 
@@ -458,5 +471,34 @@ Design is finalized. No open blockers.
   mechanism, so a future change to the auth scheme cannot leave one endpoint behind.
   Verified: no header, wrong secret, and empty header all return 401 on both;
   correct secret returns 200 on both.
+- 2026-08-09: **The daily sync is fire-and-forget; the manual import is not.**
+  cron-job.org's free plan caps a request at 30s, but the import takes minutes —
+  and the failure is worse than a truncated response: the request's
+  `CancellationToken` is threaded all the way into `FplService.ImportPoolAsync`,
+  which does one closing `SaveChangesAsync(ct)`, so a client disconnect cancels the
+  save and writes *nothing*. A capped cron would therefore never sync, silently.
+  `POST /api/admin/sync` now returns `202` immediately and runs the import on a
+  detached `Task` with `CancellationToken.None`, resolving `FplService` from a fresh
+  `IServiceScope` — the request scope, and the scoped `AuctionDbContext` inside it,
+  are disposed the moment the response returns. `import-fpl` stays synchronous on
+  purpose: something has to report the `playerCount`, and a manual caller can wait.
+  A static `Interlocked` flag keeps the two from overlapping (409 on `import-fpl`,
+  `already-running` on `sync`); one instance on the free plan makes that sufficient.
+  Verified: 202 in **5ms** against a 30s cap, `lastSyncedAt` advanced and
+  "573 players" logged *after* the connection closed, flag reset for the next run.
+- 2026-08-09: **Cold start, not import time, is what the cron timeout must cover.**
+  With the import detached, the only work inside the request is the secret check. But
+  Render's free tier sleeps after ~15 min idle, so the 22:00 job wakes a cold
+  container and that alone can approach 30s. `DEPLOY.md` documents an optional
+  21:55 `/health` warm-up job; a timed-out warm-up still works, because Render boots
+  the container whether or not the caller waits.
+- 2026-08-09: **Known inefficiency — the import is N+1.** `FplService` issues one
+  `FirstOrDefaultAsync` per player (`FplService.cs:70`), so ~573 sequential
+  round-trips to Neon; that, not the FPL fetch, is the bulk of the runtime (~162s
+  from Render, ~5s from a local machine on a warm cache — the gap is per-query
+  latency). Correctness is unaffected and the background sync makes the duration
+  invisible to callers, so this is deliberately left alone. If it ever needs fixing,
+  load the pool's players into a dictionary keyed by `ExternalId` in one query and
+  match in memory.
 
 

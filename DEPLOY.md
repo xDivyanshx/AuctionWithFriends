@@ -89,9 +89,33 @@ At [cron-job.org](https://cron-job.org) (free), create a job:
 - **Method:** `POST`
 - **Header:** `X-Sync-Secret: <the SYNC_SECRET value from step 1>`
 - **Schedule:** daily, ~22:00 IST
+- **Timeout:** whatever the plan allows — the free plan's 30s cap is fine.
 
-The first request wakes the service, so allow a generous timeout. Verify by
-running it once manually and confirming a `200` with a `playerCount`.
+`/api/admin/sync` answers `202 Accepted` in milliseconds and runs the import in
+the background, so the cron's timeout no longer has to cover the import. It
+does still have to cover Render waking up: the service is asleep at 22:00, and
+a cold start can approach 30s. If a night's job reports a timeout, the wake-up
+was slow — the retry a minute later lands on a warm service. Set the job to
+retry on failure if the plan offers it.
+
+**A `202` means accepted, not finished.** Confirm the import actually landed by
+checking `lastSyncedAt` on `GET /api/pools`:
+
+    curl -s https://<your-service>.onrender.com/api/pools
+
+To watch a sync end to end by hand, use `POST /api/admin/import-fpl` instead —
+same secret, but it blocks until done and returns the `playerCount`. Give curl
+a long `-m` (the import runs for minutes against Neon).
+
+### Optional: warm-up job
+
+To take the cold start out of the equation, add a second free cron job hitting
+`GET /health` at ~21:55 IST, five minutes before the sync. By 22:00 the service
+is awake (Render only sleeps after ~15 min idle) and `/sync` answers instantly.
+
+The warm-up may itself report a timeout, which is harmless — Render starts the
+container as soon as the request arrives and finishes booting whether or not the
+caller is still waiting. Waking the service is the whole job.
 
 ---
 
