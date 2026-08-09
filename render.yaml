@@ -25,7 +25,8 @@ services:
       - key: Cors__AllowedOrigins
         sync: false
 
-      # Shared secret for POST /api/admin/sync, sent by the cron job as the
-      # X-Sync-Secret header. Render generates a strong value on first deploy.
+      # Shared secret for the admin endpoints (POST /api/admin/sync and
+      # POST /api/admin/import-fpl), sent as the X-Sync-Secret header. Render
+      # generates a strong value on first deploy.
       - key: SYNC_SECRET
         generateValue: true

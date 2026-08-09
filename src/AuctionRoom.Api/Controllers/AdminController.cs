@@ -15,12 +15,32 @@ public class AdminController : ControllerBase
     }
 
     /// <summary>
+    /// Shared secret gate for both admin endpoints. Returns null when the caller
+    /// is authorized, otherwise the 401 to return. Both endpoints run the same
+    /// full pool import, so they carry the same protection.
+    /// </summary>
+    private IActionResult? CheckSyncSecret()
+    {
+        var expectedSecret = Environment.GetEnvironmentVariable("SYNC_SECRET") ?? "change-me-in-production";
+        var providedSecret = Request.Headers["X-Sync-Secret"].FirstOrDefault();
+
+        if (string.IsNullOrWhiteSpace(providedSecret) || providedSecret != expectedSecret)
+        {
+            return Unauthorized(new { error = "Invalid or missing X-Sync-Secret header." });
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Import or refresh the FPL player pool for a season. Idempotent.
-    /// TODO: Protect with a shared secret header for production.
+    /// Protected by X-Sync-Secret header (configured via SYNC_SECRET env var).
     /// </summary>
     [HttpPost("import-fpl")]
     public async Task<IActionResult> ImportFpl([FromQuery] string season = "2026-27", CancellationToken ct = default)
     {
+        if (CheckSyncSecret() is { } unauthorized) return unauthorized;
+
         try
         {
             var pool = await _fpl.ImportPoolAsync(season, ct);
@@ -52,14 +72,7 @@ public class AdminController : ControllerBase
     [HttpPost("sync")]
     public async Task<IActionResult> Sync([FromQuery] string season = "2026-27", CancellationToken ct = default)
     {
-        // Check shared secret.
-        var expectedSecret = Environment.GetEnvironmentVariable("SYNC_SECRET") ?? "change-me-in-production";
-        var providedSecret = Request.Headers["X-Sync-Secret"].FirstOrDefault();
-
-        if (string.IsNullOrWhiteSpace(providedSecret) || providedSecret != expectedSecret)
-        {
-            return Unauthorized(new { error = "Invalid or missing X-Sync-Secret header." });
-        }
+        if (CheckSyncSecret() is { } unauthorized) return unauthorized;
 
         try
         {

@@ -101,7 +101,7 @@ running it once manually and confirming a `200` with a `playerCount`.
 |---|---|---|
 | `ConnectionStrings__Default` | Render | Neon pooled connection string |
 | `Cors__AllowedOrigins` | Render | Exact frontend origin(s). Indexed form `Cors__AllowedOrigins__0`, `__1` for several |
-| `SYNC_SECRET` | Render | Shared secret for `X-Sync-Secret` on `/api/admin/sync` |
+| `SYNC_SECRET` | Render | Shared secret for `X-Sync-Secret` on both `/api/admin/sync` and `/api/admin/import-fpl` |
 | `PORT` | Render | Injected automatically; the container binds to it |
 | `VITE_API_BASE` | Vercel | API base URL, inlined at build time |
 
@@ -109,9 +109,6 @@ running it once manually and confirming a `200` with a `playerCount`.
 
 ## Known gaps
 
-- `POST /api/admin/import-fpl` has **no authentication** — the `SYNC_SECRET`
-  check guards `/sync` only. Anyone who finds the URL can trigger a full pool
-  import against your database. Worth closing before sharing the URL.
 - `SYNC_SECRET` falls back to the literal `"change-me-in-production"` when unset.
   `render.yaml` generates a real value, so this only bites a deploy that skips
   the blueprint.

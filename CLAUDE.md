@@ -1,7 +1,7 @@
 # AuctionRoom — Fantasy Football Auction & Standings Platform
 
 > This file is the single source of truth for architecture and decisions.
-> Keep it updated as decisions change. Last updated: 2026-08-08.
+> Keep it updated as decisions change. Last updated: 2026-08-09.
 
 ## 1. Product Overview
 
@@ -42,7 +42,8 @@ Sport: **Premier League football now.** IPL cricket later as a separate room typ
   - **StandingsService**: best-N standings via frozen-points formula
     (`InheritedPoints + current − AcquisitionPoints`), ranks, persists denormalized
     figures; per-participant squad drill-down.
-  - **AdminController**: POST import-fpl, POST sync (X-Sync-Secret header for cron).
+  - **AdminController**: POST import-fpl, POST sync — both gated by the same
+    `X-Sync-Secret` check (`SYNC_SECRET` env var) via a shared `CheckSyncSecret` helper.
   - **PoolsController**: GET pools, GET pool players (search/position/take).
   - **StandingsController**: GET standings, GET participant squad.
   - New rooms auto-link to the shared FPL pool.
@@ -102,8 +103,7 @@ Sport: **Premier League football now.** IPL cricket later as a separate room typ
   Backend suite 19/19 green; frontend lint and production build clean.
 - **Next:** Deploy (follow `DEPLOY.md`) — Render blueprint first, then Vercel
   with root dir `frontend`, then set `Cors__AllowedOrigins` to the Vercel origin
-  and redeploy, then the cron-job.org daily sync. **Before sharing the URL:**
-  `POST /api/admin/import-fpl` is still unauthenticated (see §12, 2026-08-09).
+  and redeploy, then the cron-job.org daily sync.
 
 ## 3. Finalized Requirements
 
@@ -450,9 +450,13 @@ Design is finalized. No open blockers.
 - 2026-08-09: **`/health` deliberately does not touch the database.** It is a
   liveness probe for Render; if it queried Neon, a transient DB hiccup would make
   Render tear down an otherwise healthy container.
-- 2026-08-09: **Known gap — `POST /api/admin/import-fpl` is unauthenticated.**
-  The `X-Sync-Secret` check guards `/api/admin/sync` only, so anyone with the URL
-  can trigger a full pool import. Not a new regression (the TODO predates
-  deployment) but it stops being theoretical once the API is public.
+- 2026-08-09: **Both admin endpoints share one auth gate.** `POST /api/admin/import-fpl`
+  was unauthenticated while `/sync` checked `X-Sync-Secret` — but both run the *same*
+  full pool import, so the unprotected one was a way around the protected one. Rather
+  than copy the check, the comparison moved into a private `CheckSyncSecret()` helper
+  returning `IActionResult?` (null = authorized), and both actions call it. One
+  mechanism, so a future change to the auth scheme cannot leave one endpoint behind.
+  Verified: no header, wrong secret, and empty header all return 401 on both;
+  correct secret returns 200 on both.
 
 
