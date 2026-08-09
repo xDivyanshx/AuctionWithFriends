@@ -1,0 +1,263 @@
+.console {
+  width: 100%;
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+}
+
+.console-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.console h1 {
+  margin: 0;
+  font-size: 1.6rem;
+  letter-spacing: -0.02em;
+}
+
+.console h2 {
+  margin: 0 0 0.7rem;
+  font-size: 1rem;
+}
+
+.room-meta {
+  margin: 0.3rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.room-meta strong {
+  letter-spacing: 0.1em;
+  color: var(--fg);
+}
+
+.badge {
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.badge.host {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+
+.head-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+
+/* --- host record form --- */
+
+.record {
+  padding: 1rem 1.1rem 1.1rem;
+  margin-bottom: 2rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.record-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6rem;
+  margin-top: 0.9rem;
+}
+
+.record label,
+.picker label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.record-row > label:first-child {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.price-field {
+  flex: 0 0 6rem;
+}
+
+.record input,
+.record select,
+.picker input,
+.picker select {
+  padding: 0.5rem 0.6rem;
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.record .primary {
+  flex: 0 0 auto;
+  padding: 0.55rem 1.1rem;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent-fg);
+  background: var(--accent);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.record .primary:disabled,
+.record .undo:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.record .undo {
+  margin-top: 0.9rem;
+  padding: 0.4rem 0.75rem;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--danger-fg);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.notice {
+  margin: 0 0 2rem;
+  padding: 0.7rem 0.85rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+/* --- player picker --- */
+
+.picker-controls {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.picker-controls .grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.results {
+  max-height: 14rem;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.results li + li {
+  border-top: 1px solid var(--border-soft);
+}
+
+.results button {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.results button:hover {
+  background: var(--accent-soft);
+}
+
+.p-name {
+  font-weight: 600;
+}
+
+.p-meta {
+  flex: 1 1 auto;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.p-pts {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.results .empty {
+  padding: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.chosen {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.7rem 0 0;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.9rem;
+  background: var(--accent-soft);
+  border-radius: 6px;
+}
+
+.chosen-meta {
+  flex: 1 1 auto;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.chosen button {
+  padding: 0.25rem 0.55rem;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+/* --- tables --- */
+
+.teams,
+.sold {
+  margin-top: 1.75rem;
+}
+
+.count {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.seq {
+  color: var(--muted);
+}

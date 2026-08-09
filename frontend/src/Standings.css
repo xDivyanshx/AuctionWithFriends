@@ -1,0 +1,188 @@
+.standings {
+  width: 100%;
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+}
+
+.standings h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  letter-spacing: -0.02em;
+}
+
+.standings-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+/* --- room code form --- */
+
+.room-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.room-form input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.6rem 0.75rem;
+  font: inherit;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.room-form button {
+  flex: 0 0 auto;
+  padding: 0.6rem 1.25rem;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent-fg);
+  background: var(--accent);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.room-form button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* --- leaderboard ---
+   Table, message, and .team-name/.user-name primitives live in index.css;
+   only standings-specific rules are below. */
+
+.board tr.open td {
+  background: var(--surface);
+}
+
+.rank {
+  width: 2.5rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.score {
+  font-weight: 700;
+}
+
+/* Team cell is a button so the drill-down is keyboard reachable. */
+.team-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  width: 100%;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.team-btn:hover .team-name {
+  color: var(--accent);
+}
+
+/* --- squad drill-down --- */
+
+.squad {
+  margin-top: 1.75rem;
+  padding: 1rem 1.1rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.squad-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.squad-head h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.close {
+  padding: 0 0.35rem;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.close:hover {
+  color: var(--fg);
+}
+
+.squad-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin: 0 0 1rem;
+}
+
+.squad-stats dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.squad-stats dd {
+  margin: 0.15rem 0 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.slots tr.benched td {
+  color: var(--muted);
+}
+
+.slots tr.counts {
+  background: var(--accent-soft);
+}
+
+.pos {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.inherited {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.legend {
+  margin: 0.9rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+@media (max-width: 30rem) {
+  .board td:last-child,
+  .board th:last-child {
+    display: none; /* drop Budget on narrow screens */
+  }
+}

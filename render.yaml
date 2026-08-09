@@ -1,0 +1,31 @@
+# Render blueprint. Create the service via Render → New → Blueprint, pointed at
+# this repo. Secrets are deliberately NOT in this file — every value below with
+# `sync: false` must be filled in from the Render dashboard, so the connection
+# string never enters git.
+services:
+  - type: web
+    name: auctionroom-api
+    runtime: docker
+    plan: free
+    region: singapore # closest free region to an IST-based group; change if you prefer
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      # Neon pooled connection string. Paste the value Neon shows as "Pooled
+      # connection", converted to Npgsql key=value form:
+      #   Host=...;Database=...;Username=...;Password=...;SSL Mode=Require;Trust Server Certificate=true
+      - key: ConnectionStrings__Default
+        sync: false
+
+      # The deployed frontend origin, e.g. https://auctionroom.vercel.app
+      # No trailing slash — CORS origin matching is exact.
+      # For more than one origin use the indexed form instead:
+      #   Cors__AllowedOrigins__0, Cors__AllowedOrigins__1, ...
+      - key: Cors__AllowedOrigins
+        sync: false
+
+      # Shared secret for POST /api/admin/sync, sent by the cron job as the
+      # X-Sync-Secret header. Render generates a strong value on first deploy.
+      - key: SYNC_SECRET
+        generateValue: true

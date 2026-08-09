@@ -1,0 +1,30 @@
+# --- .NET ---
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.idea/
+
+# Local publish output
+publish/
+artifacts/
+
+# --- Node / frontend ---
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# --- Secrets & local config ---
+# The Neon connection string lives in `dotnet user-secrets` (outside the repo)
+# and in the host's environment config. Nothing here should ever hold it.
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+appsettings.*.Local.json
+secrets.json
+
+# --- Logs & scratch ---
+*.log
