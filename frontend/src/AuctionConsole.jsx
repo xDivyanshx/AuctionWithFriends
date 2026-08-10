@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getResults, getRoom, recordResult, undoLast } from './api';
+import { getResults, getRoom, getShortlist, recordResult, undoLast } from './api';
 import PlayerPicker from './PlayerPicker';
 import './AuctionConsole.css';
 
@@ -7,11 +7,14 @@ import './AuctionConsole.css';
  *  with <=10 viewers, so a short poll is cheaper than wiring up WebSockets. */
 const POLL_MS = 4000;
 
-export default function AuctionConsole({ session, onExit, onViewStandings }) {
+export default function AuctionConsole({
+  session, onExit, onViewStandings, onManageShortlist,
+}) {
   const { roomCode, userId } = session;
 
   const [room, setRoom] = useState(null);
   const [results, setResults] = useState([]);
+  const [shortlist, setShortlist] = useState(null);
   const [loadError, setLoadError] = useState(null);
 
   // Host-only form state
@@ -44,6 +47,18 @@ export default function AuctionConsole({ session, onExit, onViewStandings }) {
     const id = setInterval(refresh, POLL_MS);
     return () => clearInterval(id);
   }, [refresh]);
+
+  // Deliberately outside the poll: only the host changes the shortlist, and
+  // leaving this screen to do so unmounts the console, so a mount-time read is
+  // always current. A failure here is not surfaced — the shortlist only affects
+  // the picker's empty-state wording, and the server enforces it regardless.
+  useEffect(() => {
+    let cancelled = false;
+    getShortlist(roomCode)
+      .then((s) => { if (!cancelled) setShortlist(s); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [roomCode]);
 
   const soldPlayerIds = new Set(results.map((r) => r.playerId));
 
@@ -108,6 +123,11 @@ export default function AuctionConsole({ session, onExit, onViewStandings }) {
           </p>
         </div>
         <div className="head-actions">
+          {isHost && (
+            <button type="button" className="ghost" onClick={() => onManageShortlist(room.playerPoolId)}>
+              Shortlist{shortlist?.curated ? ` (${shortlist.count})` : ''}
+            </button>
+          )}
           <button type="button" className="ghost" onClick={onViewStandings}>
             Standings
           </button>
@@ -123,7 +143,9 @@ export default function AuctionConsole({ session, onExit, onViewStandings }) {
           {actionError && <p className="error" role="alert">{actionError}</p>}
 
           <PlayerPicker
+            roomCode={roomCode}
             poolId={room.playerPoolId}
+            shortlisted={shortlist?.curated ?? false}
             soldPlayerIds={soldPlayerIds}
             selected={player}
             onSelect={setPlayer}

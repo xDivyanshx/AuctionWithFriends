@@ -5,14 +5,6 @@
   padding: 2rem 1rem 4rem;
 }
 
-.console-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
 .console h1 {
   margin: 0;
   font-size: 1.6rem;
@@ -22,17 +14,6 @@
 .console h2 {
   margin: 0 0 0.7rem;
   font-size: 1rem;
-}
-
-.room-meta {
-  margin: 0.3rem 0 0;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.room-meta strong {
-  letter-spacing: 0.1em;
-  color: var(--fg);
 }
 
 .badge {
@@ -52,12 +33,6 @@
   color: var(--accent);
   background: var(--accent-soft);
   border-color: transparent;
-}
-
-.head-actions {
-  display: flex;
-  gap: 0.4rem;
-  flex: 0 0 auto;
 }
 
 /* --- host record form --- */
@@ -164,7 +139,8 @@
 }
 
 .results {
-  max-height: 14rem;
+  /* Taller than before: rows now carry a photo, so fewer fit per screen. */
+  max-height: 20rem;
   margin: 0.6rem 0 0;
   padding: 0;
   overflow-y: auto;
@@ -180,10 +156,10 @@
 
 .results button {
   display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.55rem;
   width: 100%;
-  padding: 0.45rem 0.6rem;
+  padding: 0.4rem 0.6rem;
   font: inherit;
   text-align: left;
   color: inherit;
@@ -196,21 +172,7 @@
   background: var(--accent-soft);
 }
 
-.p-name {
-  font-weight: 600;
-}
-
-.p-meta {
-  flex: 1 1 auto;
-  font-size: 0.78rem;
-  color: var(--muted);
-}
-
-.p-pts {
-  font-size: 0.78rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-}
+/* --- player photo and result rows are shared primitives; see index.css --- */
 
 .results .empty {
   padding: 0.6rem;
@@ -218,24 +180,61 @@
   color: var(--muted);
 }
 
-.chosen {
+/* --- the player currently on the block --- */
+
+.chosen-card {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  align-items: flex-start;
+  gap: 0.7rem;
   margin: 0.7rem 0 0;
-  padding: 0.5rem 0.65rem;
-  font-size: 0.9rem;
+  padding: 0.6rem 0.7rem;
   background: var(--accent-soft);
   border-radius: 6px;
 }
 
-.chosen-meta {
+.chosen-body {
   flex: 1 1 auto;
+  min-width: 0;
+}
+
+.chosen-name {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  font-size: 1rem;
+}
+
+.chosen-meta {
+  margin: 0.1rem 0 0;
   font-size: 0.78rem;
   color: var(--muted);
 }
 
-.chosen button {
+/* Stats wrap rather than scroll: six short pairs fit two rows on a phone. */
+.p-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.9rem;
+  margin: 0.5rem 0 0;
+}
+
+.p-stat dt {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+
+.p-stat dd {
+  margin: 0;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.chosen-card > button {
+  flex: 0 0 auto;
   padding: 0.25rem 0.55rem;
   font: inherit;
   font-size: 0.78rem;

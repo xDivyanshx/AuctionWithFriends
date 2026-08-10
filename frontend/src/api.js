@@ -92,9 +92,37 @@ export const undoLast = (roomCode, userId) =>
   post(`${room(roomCode)}/auction/undo`, {}, userId);
 
 /** GET /api/pools/{id}/players → PlayerResponse[] */
-export function getPoolPlayers(poolId, { search, position, take = 25 } = {}) {
+export function getPoolPlayers(poolId, filters = {}) {
+  return get(`/api/pools/${poolId}/players?${playerQuery(filters)}`);
+}
+
+/** GET /api/pools/{id}/clubs → string[] */
+export const getPoolClubs = (poolId) => get(`/api/pools/${poolId}/clubs`);
+
+/**
+ * GET /api/rooms/{code}/shortlist/players → PlayerResponse[]
+ *
+ * Same shape as the pool endpoint, but limited to what this room may auction.
+ * The picker uses this one so it can never offer a player the sale would reject.
+ */
+export function getRoomPlayers(roomCode, filters = {}) {
+  return get(`${room(roomCode)}/shortlist/players?${playerQuery(filters)}`);
+}
+
+/** GET /api/rooms/{code}/shortlist → ShortlistResponse */
+export const getShortlist = (roomCode) => get(`${room(roomCode)}/shortlist`);
+
+/** POST /api/rooms/{code}/shortlist → ShortlistResponse (host only) */
+export const updateShortlist = (roomCode, payload, userId) =>
+  post(`${room(roomCode)}/shortlist`, payload, userId);
+
+/** Shared query string for the two player-search endpoints. */
+function playerQuery({ search, position, club, minPoints, take = 25 } = {}) {
   const qs = new URLSearchParams({ take: String(take) });
   if (search) qs.set('search', search);
   if (position) qs.set('position', position);
-  return get(`/api/pools/${poolId}/players?${qs}`);
+  if (club) qs.set('club', club);
+  // 0 is the default floor, so only send a real filter.
+  if (minPoints) qs.set('minPoints', String(minPoints));
+  return qs;
 }

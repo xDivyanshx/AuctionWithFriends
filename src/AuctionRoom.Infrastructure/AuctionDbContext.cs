@@ -16,6 +16,7 @@ public class AuctionDbContext : DbContext
     public DbSet<AuctionResult> AuctionResults => Set<AuctionResult>();
     public DbSet<Holding> Holdings => Set<Holding>();
     public DbSet<Swap> Swaps => Set<Swap>();
+    public DbSet<ShortlistEntry> ShortlistEntries => Set<ShortlistEntry>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
     protected override void OnModelCreating(ModelBuilder b)
@@ -77,6 +78,13 @@ public class AuctionDbContext : DbContext
             e.Property(x => x.Team).HasMaxLength(255);
             e.Property(x => x.Position).HasConversion<string>().HasMaxLength(20);
             e.Property(x => x.ExternalId).HasMaxLength(50);
+            // FPL availability code — a single letter, but give it room.
+            e.Property(x => x.Status).HasMaxLength(10);
+            // News is deliberately left unbounded (Postgres text): it is free text
+            // from FPL, and a length cap would throw at save and break the nightly
+            // sync over a wordy injury note.
+            // One decimal place in the feed ("4.4"); 4,1 covers it with headroom.
+            e.Property(x => x.PointsPerGame).HasPrecision(4, 1);
             e.HasIndex(x => new { x.PoolId, x.ExternalId });
             e.HasOne(x => x.Pool).WithMany(p => p.Players)
                 .HasForeignKey(x => x.PoolId).OnDelete(DeleteBehavior.Cascade);
@@ -115,6 +123,20 @@ public class AuctionDbContext : DbContext
             e.HasIndex(x => new { x.RoomId, x.SwappedAt });
             e.HasOne(x => x.Room).WithMany(r => r.Swaps)
                 .HasForeignKey(x => x.RoomId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<ShortlistEntry>(e =>
+        {
+            // A player is either on a room's shortlist or not — adding twice is a
+            // no-op, so the unique index makes that a database guarantee rather
+            // than something every caller has to remember.
+            e.HasIndex(x => new { x.RoomId, x.PlayerId }).IsUnique();
+            e.HasOne(x => x.Room).WithMany().HasForeignKey(x => x.RoomId)
+                .OnDelete(DeleteBehavior.Cascade);
+            // Restrict, like Holding: a shortlisted player must not be deletable
+            // out from under a room that is mid-auction.
+            e.HasOne(x => x.Player).WithMany().HasForeignKey(x => x.PlayerId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         b.Entity<AuditEvent>(e =>

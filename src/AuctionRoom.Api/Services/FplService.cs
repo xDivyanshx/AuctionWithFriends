@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using AuctionRoom.Domain;
 using AuctionRoom.Infrastructure;
@@ -73,39 +74,62 @@ public class FplService
             var fullName = $"{elem.FirstName} {elem.SecondName}".Trim();
             var teamName = teams.GetValueOrDefault(elem.Team, "Unknown");
             var position = positions.GetValueOrDefault(elem.ElementType, PlayerPosition.Unknown);
+            // FPL's "photo" field claims a .jpg ("223094.jpg") but the asset is
+            // only served as .png — the .jpg URL 403s for every player. Swap the
+            // extension rather than trusting the feed. Not every player has an
+            // asset at all; those 403 too, and the UI falls back to initials.
             var photoUrl = string.IsNullOrWhiteSpace(elem.Photo)
                 ? null
-                : $"https://resources.premierleague.com/premierleague/photos/players/110x140/p{elem.Photo}";
+                : $"https://resources.premierleague.com/premierleague/photos/players/110x140/p{Path.GetFileNameWithoutExtension(elem.Photo)}.png";
 
             if (player is null)
             {
-                player = new Player
-                {
-                    PoolId = pool.Id,
-                    ExternalId = externalId,
-                    Name = fullName,
-                    Team = teamName,
-                    Position = position,
-                    PhotoUrl = photoUrl,
-                    TotalPoints = elem.TotalPoints,
-                    EventPoints = elem.EventPoints
-                };
+                player = new Player { PoolId = pool.Id, ExternalId = externalId };
                 _db.Players.Add(player);
             }
-            else
-            {
-                // Update in place (name/team can change mid-season; points always update).
-                player.Name = fullName;
-                player.Team = teamName;
-                player.Position = position;
-                player.PhotoUrl = photoUrl;
-                player.TotalPoints = elem.TotalPoints;
-                player.EventPoints = elem.EventPoints;
-            }
+
+            // Every field is assigned on both the insert and the update path: FPL
+            // changes names, clubs, prices and availability mid-season, and one
+            // shared block cannot drift the way two branches can.
+            player.Name = fullName;
+            player.Team = teamName;
+            player.Position = position;
+            player.PhotoUrl = photoUrl;
+            player.TotalPoints = elem.TotalPoints;
+            player.EventPoints = elem.EventPoints;
+            player.BirthDate = ParseBirthDate(elem.BirthDate);
+            player.PointsPerGame = ParsePointsPerGame(elem.PointsPerGame);
+            player.Minutes = elem.Minutes;
+            player.Starts = elem.Starts ?? 0;
+            player.GoalsScored = elem.GoalsScored;
+            player.Assists = elem.Assists;
+            player.NowCost = elem.NowCost;
+            player.Status = elem.Status;
+            player.News = elem.News;
         }
 
         pool.LastSyncedAt = DateTimeOffset.UtcNow;
         await _db.SaveChangesAsync(ct);
         return pool;
     }
+
+    /// <summary>
+    /// FPL sends "1995-09-15", or null for the players it has no date for. An
+    /// unparseable value is treated as absent rather than throwing: one odd row
+    /// must not fail the whole nightly sync.
+    /// </summary>
+    private static DateOnly? ParseBirthDate(string? value) =>
+        DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+            DateTimeStyles.None, out var parsed)
+            ? parsed
+            : null;
+
+    /// <summary>
+    /// Invariant culture on purpose: a comma-decimal server locale would read
+    /// "4.4" as 44.
+    /// </summary>
+    private static decimal ParsePointsPerGame(string? value) =>
+        decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : 0m;
 }

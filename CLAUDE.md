@@ -1,7 +1,7 @@
 # AuctionRoom — Fantasy Football Auction & Standings Platform
 
 > This file is the single source of truth for architecture and decisions.
-> Keep it updated as decisions change. Last updated: 2026-08-09.
+> Keep it updated as decisions change. Last updated: 2026-08-11.
 
 ## 1. Product Overview
 
@@ -18,14 +18,15 @@ Sport: **Premier League football now.** IPL cricket later as a separate room typ
 
 ## 2. Current Status
 
-- **Phase:** Phase 7 (deployment) — API and frontend are both live (see the deploy
-  bullet below). Phases 4 (backend), 5 (standings page) and 6 (auction console)
-  complete and verified before it. **The MVP is feature-complete and deployed**;
-  what remains is the daily sync cron and a credential rotation.
+- **Phase:** post-MVP feature work. The MVP is feature-complete, deployed and
+  syncing daily (Phases 4–7: backend, standings page, auction console, deployment,
+  cron). Now working through a 5-phase enhancement plan: Phase 1 (player detail)
+  and Phase 2 (auction shortlist) are done; Phases 3–5 remain.
 - **What exists:**
   - Solution scaffold: Api (.NET 10), Domain, Infrastructure, Tests
   - All domain entities with updated transaction model (1-for-1 swaps, refund+acquire money)
-  - EF Core DbContext + 3 migrations applied to Neon: InitialCreate, AddHoldings, AddHoldingAcquisitionPrice
+  - EF Core DbContext + 5 migrations applied to Neon: InitialCreate, AddHoldings,
+    AddHoldingAcquisitionPrice, AddPlayerDetailFields, AddShortlistEntries
   - **RoomService**: create room, join room, get room state (with squad counts loaded)
   - **AuctionService**: record result (budget/squad/player-exists/pool validation), undo last, get results
   - **SwapService**: 1-for-1 unsold-pool and P2P swaps with frozen-points inheritance, weekend-only
@@ -48,7 +49,10 @@ Sport: **Premier League football now.** IPL cricket later as a separate room typ
     timeout-capped cron). Both gated by the same `X-Sync-Secret` check
     (`SYNC_SECRET` env var) via a shared `CheckSyncSecret` helper, and both behind
     one single-flight gate so two imports cannot overlap.
-  - **PoolsController**: GET pools, GET pool players (search/position/take).
+  - **PoolsController**: GET pools, GET pool players (search/club/position/
+    minPoints/take), GET pool clubs.
+  - **ShortlistController**: GET shortlist, GET shortlist players, POST shortlist
+    (host-only batch add/remove). See the Phase 2 bullet below.
   - **StandingsController**: GET standings, GET participant squad.
   - New rooms auto-link to the shared FPL pool.
   - **Tests (AuctionRoom.Tests)**: 19 xUnit tests against real Neon Postgres with fake clock
@@ -67,16 +71,23 @@ Sport: **Premier League football now.** IPL cricket later as a separate room typ
     extra runtime deps. `api.js` (`get`/`post` wrappers, `VITE_API_BASE`,
     `X-User-Id` sent from the stored session), `session.js` (localStorage
     identity: userId, roomCode, participantId, isHost), `App.jsx` (session-based
-    routing: Home → console ⇄ standings), `Home.jsx` (create or join a room),
-    `AuctionConsole.jsx` (host records/undoes; everyone sees live budgets and
-    squads, 4s poll), `PlayerPicker.jsx` (debounced pool search, sold players
-    filtered out), `Standings.jsx` (leaderboard, drill-down; accepts
+    routing: Home → console ⇄ standings ⇄ shortlist), `Home.jsx` (create or join
+    a room), `AuctionConsole.jsx` (host records/undoes; everyone sees live
+    budgets and squads, 4s poll; host gets a Shortlist button showing the count),
+    `PlayerPicker.jsx` (debounced search over the room's auctionable slice, sold
+    players filtered out, photo + age + club + position + price + last-season
+    stats per player, injury badge, initials fallback via `PlayerPhoto`),
+    `ShortlistManager.jsx` (host curates the auction pool: club/position/
+    min-points filters, per-row toggle, bulk add/remove all shown),
+    `Standings.jsx` (leaderboard, drill-down; accepts
     `initialCode`/`onBack` so a session flows into it), `SquadPanel.jsx`
-    (per-slot contributions, best-N rows highlighted). Shared primitives
+    (per-slot contributions, best-N rows highlighted). Shared player-row
+    primitives (`PlayerPhoto`, `StatusBadge`, `PlayerIdent`, `PlayerFigures`) in
+    `player.jsx`, FPL vocabulary and formatting in `fpl.js`. Shared CSS
     (`.board`/`.slots` tables, `.error`, `.empty`, `.sr-only`, `.team-name`)
-    live in `index.css`; per-screen rules in `Home.css`, `AuctionConsole.css`,
-    `Standings.css`. Keyboard reachable, `.sr-only` labels, `role="alert"`
-    errors. Lint (oxlint) and production build both clean.
+    lives in `index.css`; per-screen rules in `Home.css`, `AuctionConsole.css`,
+    `ShortlistManager.css`, `Standings.css`. Keyboard reachable, `.sr-only`
+    labels, `role="alert"` errors. Lint (oxlint) and production build both clean.
   - **CORS** in `Program.cs`: any loopback origin in Development, configured
     `Cors:AllowedOrigins` in production. `UseHttpsRedirection` is dev-exempt —
     a 307 breaks CORS preflight from the Vite dev server.
@@ -113,10 +124,54 @@ Sport: **Premier League football now.** IPL cricket later as a separate room typ
   573-player pool from Neon, admin endpoints 401 without the secret, GET returns 200
   rather than a 307, and preflight from the Vercel origin (including `x-user-id`)
   is allowed while a foreign origin is refused.
-- **Next:** create the cron-job.org daily job per `DEPLOY.md` §4 (POST `/api/admin/sync`,
-  `X-Sync-Secret`, ~22:00 IST, free-plan 30s timeout is fine), optionally the 21:55
-  `/health` warm-up, then rotate the Neon `neondb_owner` password and update it in
-  Render + local `dotnet user-secrets`.
+- **Cron jobs live (2026-08-09).** Both created at cron-job.org: the 22:00 IST sync
+  (POST `/api/admin/sync`, `X-Sync-Secret`) and the 21:55 IST `/health` warm-up.
+  Verified against the live deploy — `lastSyncedAt` advanced from a capped caller,
+  which the old blocking endpoint could not have produced.
+- **Phase 1 done (2026-08-10): player detail in the auction picker.** `Player` gained
+  `BirthDate`, `PointsPerGame`, `Minutes`, `Starts`, `GoalsScored`, `Assists`,
+  `NowCost`, `Status`, `News`; migration `AddPlayerDetailFields` applied to Neon and
+  the pool re-imported to populate them. `PlayerPicker` now shows photo, club, age,
+  position, price and last-season stats, with an initials fallback and an injury
+  badge. Verified: all 573 rows populated (ages 16–40, the 17 known null birth dates,
+  status split 514 a / 35 i / 15 d / 6 u / 3 s), every DTO field the component reads
+  present in the live response, six render cases clean (including null age, missing
+  photo and zero stats), 19/19 backend tests, lint and production build clean.
+- **Phase 2 done (2026-08-11): room-scoped auction shortlist.** The host curates
+  which slice of the pool a room auctions — 573 down to ~200 — without touching
+  the shared pool or the swap market.
+  - `ShortlistEntry` (RoomId, PlayerId, AddedAt) with a unique index on
+    `(RoomId, PlayerId)`; migration `AddShortlistEntries` applied to Neon.
+  - **ShortlistService**: `GetPlayerIdsAsync`, batch `ApplyAsync(add, remove)`
+    (idempotent both ways, off-pool ids rejected, one audit event per edit),
+    `IsAuctionableAsync` used as the gate in `AuctionService.RecordResultAsync`.
+  - **ShortlistController**: GET `/api/rooms/{code}/shortlist` (public — the
+    console reads it to label its button), GET `/shortlist/players` (the room's
+    auctionable slice, filterable), POST `/shortlist` (host-only).
+  - **PlayerQuery**: the search/filter/order expression shared by the pool
+    endpoint and the room endpoint, so the picker and the shortlist screen can
+    never drift apart. `GET /api/pools/{id}/clubs` added for the club dropdown.
+  - **Frontend**: `ShortlistManager.jsx` + `.css` (club / position / min-points
+    filters, per-row toggle, "Add all shown" / "Remove all shown", optimistic
+    with inverse-delta revert), a fourth view in `App.jsx`, a Shortlist button
+    in `AuctionConsole` carrying the live count, and `PlayerPicker` switched to
+    the room-scoped endpoint. `fpl.js` split out of `player.jsx`.
+- **Verified (shortlist):** three harnesses outside the repo, all green.
+  46/46 API contract + behaviour assertions (filters, empty-means-unrestricted,
+  host-only 403s that change nothing, curation round-trip, record gated off-list,
+  atomic rejected batches, add+remove of the same id resolving to removed, bulk
+  club add/remove, wipe re-opening the pool, 404s). 21/21 static server-renders
+  against live payloads including 9 degenerate rows. 28/28 jsdom assertions with
+  effects actually running — the shortlist fetch, the button it drives, the
+  room-scoped picker search, bulk add/remove persisting all 577, and a refused
+  viewer edit surfacing an error, reverting the optimistic toggle and leaving
+  server state untouched. 19/19 backend tests, lint and production build clean.
+  All fixtures were tagged `season: "test"` and torn down; the shared pool
+  (1 pool, 577 players) and the 2 real rooms were verified intact afterwards.
+- **Next:** Phase 3 (end auction → `War`), Phase 4 (host swap screen),
+  Phase 5 (tests). Still outstanding on the user's side: rotate the Neon
+  `neondb_owner` password and update it in Render + local
+  `dotnet user-secrets`.
 
 ## 3. Finalized Requirements
 
@@ -199,6 +254,9 @@ transaction involves releasing one owned player AND acquiring another.
 - Room config: budget, squad size (e.g. 15), best-N-for-scoring (e.g. 11),
   optional team constraints (max from same real club, position min/max).
 - Select/import a player pool (FPL players — see §6).
+- **Auction shortlist**: host optionally curates which slice of the shared pool
+  this room auctions (filters by club / position / min points). Auction-only —
+  it does not restrict swaps. Empty = the whole pool is auctionable.
 - **Auction recording flow** (one-time event): next player → pick winner →
   enter price → confirm → budgets update → visible to all immediately.
 - **Undo last recorded result** (1 step).
@@ -296,6 +354,8 @@ players          id, pool_id, external_id(FPL id), name, team, position,
                  photo_url, total_points, event_points, metadata JSONB
 auction_results  id, room_id, player_id, participant_id, purchase_price,
                  sequence_number, created_at   UNIQUE(room_id, player_id)
+shortlist_entries id, room_id, player_id, added_at   UNIQUE(room_id, player_id)
+                 (empty for a room = whole pool auctionable)
 swaps            id, room_id, type('ParticipantToParticipant'|'UnsoldPool'),
                  participant_id, counterparty_participant_id(nullable),
                  player_out_id, player_in_id,
@@ -323,12 +383,16 @@ PATCH  /api/rooms/:code/status            host: setup->auction->active->complete
 GET    /api/rooms/:code/auction           current player + remaining pool + results
 POST   /api/rooms/:code/auction/record    host: {playerId, participantId, price}
 POST   /api/rooms/:code/auction/undo      host: undo last result
+GET    /api/rooms/:code/shortlist         shortlisted player ids + count + curated
+GET    /api/rooms/:code/shortlist/players the room's auctionable slice (filterable)
+POST   /api/rooms/:code/shortlist         host: {add[], remove[]} batch edit
 POST   /api/rooms/:code/swaps             host: record a swap (weekend + cooldown checked)
 
 GET    /api/rooms/:code/standings         leaderboard (derived best-N)
 GET    /api/rooms/:code/participants/:id  squad + per-player contributions
 
 GET    /api/player-pools                  list pools
+GET    /api/pools/:id/clubs               distinct club names (filter dropdown)
 POST   /api/player-pools/:id/import       import/refresh from FPL
 
 POST   /api/cron/sync-fpl                 protected; daily ~22:00 (in-app timer
@@ -500,5 +564,80 @@ Design is finalized. No open blockers.
   invisible to callers, so this is deliberately left alone. If it ever needs fixing,
   load the pool's players into a dictionary keyed by `ExternalId` in one query and
   match in memory.
+- 2026-08-10: **FPL's `photo` field lies about the extension.** It reads
+  `"223094.jpg"`, but the CDN only serves `.png` — every `PhotoUrl` we had written
+  since the importer existed returned 403. Nothing rendered a photo until the
+  auction picker did, so the bug sat unnoticed for the whole build. The importer now
+  swaps the extension via `Path.GetFileNameWithoutExtension`. A minority of players
+  have no asset at any size and 403 regardless, so `PlayerPhoto` falls back to
+  initials on `onError` rather than trusting the URL to resolve. Sampled 19 stored
+  URLs after the fix: 16 × 200, 3 × 403 (all genuinely asset-less).
+- 2026-08-10: **The picker requests a smaller photo than the API stores.** FPL's
+  "110x140" asset is really 220×280 at ~93KB, and a search renders 25 rows, so list
+  rows rewrite the URL to the 40x40 variant (~14KB, an 80×80 square crop) while the
+  selected-player card keeps the full size. The rewrite is a plain string replace
+  that no-ops if the URL shape ever changes, so a CDN path change degrades to
+  heavier images rather than broken ones.
+- 2026-08-10: **Age is derived on read, never stored.** `Player.BirthDate` holds the
+  date and `PoolsController` computes whole years per request, so a stored age cannot
+  silently go stale between syncs. The birthday adjustment does not translate to SQL,
+  so the projection materializes first and maps in memory — the same reason the
+  endpoint no longer projects straight into `PlayerResponse`.
+- 2026-08-10: **The FPL feed is parsed defensively, because one bad row would cost a
+  whole night's sync.** `points_per_game` arrives as a string and is parsed with
+  `InvariantCulture` (a comma-decimal locale reads "4.4" as 44); `birth_date` is null
+  for 17 players and an unparseable value is treated as absent rather than throwing;
+  `starts` is modelled as `int?` so a missing field on a single element cannot fail
+  the whole deserialize. `News` is deliberately left unbounded — a length cap would
+  throw at `SaveChanges` on a wordy injury note and abort the entire import.
+- 2026-08-11: **The shortlist is auction-scoped, not a room universe.** Per the
+  user: *"its not my universe, its just for the auction not the room… if a player
+  wants to swap with someone of a smaller team, his choice."* So
+  `ShortlistEntry` gates exactly one operation — `AuctionService.RecordResultAsync`
+  — and `SwapService` was left untouched: an unsold player who was never
+  shortlisted is still a legal swap target. Room-scoped rather than pool-scoped
+  because the FPL pool is shared and public; two rooms must be able to auction
+  different slices of it.
+- 2026-08-11: **An empty shortlist means unrestricted, not "nothing auctionable".**
+  Rooms created before Phase 2 have no rows, and a host who never opens the screen
+  should still be able to run an auction — the opposite default would brick the
+  feature the day it shipped. `IsAuctionableAsync` therefore probes "is this room
+  curated at all?" first and only then checks membership, which also makes
+  *emptying* the list a deliberate way to re-open the whole pool. The cost is that
+  "curated but every player removed" is not expressible; that state has no use.
+- 2026-08-11: **One query expression, two endpoints.** The picker now reads
+  `GET /api/rooms/{code}/shortlist/players` instead of the pool endpoint, but both
+  must search, filter and order identically or the shortlist screen would show a
+  player the picker then hides. The shared predicate lives in `PlayerQuery` and is
+  composed into both; the room endpoint adds a correlated `EXISTS` against
+  `ShortlistEntries` rather than materializing ids into an `IN` list, because a
+  curated room can hold ~200 of them and Npgsql would send ~200 parameters per
+  keystroke of a debounced search.
+- 2026-08-11: **Shortlist edits persist per action, with an inverse-delta revert.**
+  Curating 573 rows means a lot of clicks, so each toggle and each bulk action is
+  its own request and there is no save button to forget. A refused request undoes
+  itself by applying the *inverse delta*, not by restoring a snapshot of the set:
+  clicking down a long list leaves several requests in flight, and a snapshot taken
+  before one of them would wipe out the others when restored. The deltas are always
+  disjoint from current membership, so the inverse is exact.
+- 2026-08-11: **`fpl.js` exists so `player.jsx` exports only components.** Vite's
+  fast refresh silently stops working for a module that mixes components with other
+  exports — oxlint's `react(only-export-components)` caught it the moment the shared
+  primitives were extracted. The FPL vocabulary (position names, status labels,
+  price formatting) moved to `fpl.js`, which the shortlist screen wants anyway
+  despite rendering no player row.
+- 2026-08-11: **UI verification needs a DOM with effects running, and it must poll.**
+  A static `renderToStaticMarkup` pass cannot reach the code Phase 2 added — the
+  shortlist fetch, the button label it drives, the room-scoped search — because all
+  of it lives in effects. The jsdom harness that does reach it initially failed on
+  fixed `settle()` sleeps racing a 250 ms debounce plus a network round-trip; every
+  assertion now waits on a condition instead. Two of its failures were the test's
+  fault, not the product's, and both are worth remembering: an assertion that ran
+  before a fetch resolved counted the empty-state `<li>` as a result row, and the
+  "revert" check assumed an unticked starting row when the fixture's first three
+  rows were the three already-shortlisted players (both lists order points-desc).
+  Optimistic state has to be observed inside a synchronous `act()` — the default
+  click helper's 400 ms settle is long enough for a localhost 403 to arrive and
+  revert it first.
 
 

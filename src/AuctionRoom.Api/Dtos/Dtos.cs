@@ -61,6 +61,12 @@ public record AuctionResultResponse(
     int PurchasePrice,
     int SequenceNumber);
 
+/// <summary>
+/// A player as the auction picker sees them. <paramref name="Age"/> is derived from
+/// the stored birth date on every read, so it cannot go stale; it is null for the
+/// players FPL publishes no date for. <paramref name="NowCost"/> is FPL's price in
+/// tenths of a million (60 = £6.0m).
+/// </summary>
 public record PlayerResponse(
     Guid Id,
     string? ExternalId,
@@ -69,7 +75,38 @@ public record PlayerResponse(
     string Position,
     string? PhotoUrl,
     int TotalPoints,
-    int EventPoints);
+    int EventPoints,
+    int? Age,
+    decimal PointsPerGame,
+    int Minutes,
+    int Starts,
+    int GoalsScored,
+    int Assists,
+    int NowCost,
+    string? Status,
+    string? News);
+
+// ---------- Shortlist ----------
+
+/// <summary>
+/// Host edits the room's auction shortlist. Both lists are optional and both are
+/// idempotent, so the client can send whatever the user just toggled without
+/// first working out what is already stored.
+/// </summary>
+public record UpdateShortlistRequest(
+    IReadOnlyList<Guid>? Add,
+    IReadOnlyList<Guid>? Remove);
+
+/// <summary>
+/// The room's shortlist. <paramref name="Curated"/> is false when the list is
+/// empty, which means the auction is not restricted at all — the distinction
+/// matters to the UI, which otherwise cannot tell "not set up" from "everything
+/// removed".
+/// </summary>
+public record ShortlistResponse(
+    IReadOnlyList<Guid> PlayerIds,
+    int Count,
+    bool Curated);
 
 // ---------- Swap requests ----------
 

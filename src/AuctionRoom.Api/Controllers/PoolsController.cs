@@ -1,4 +1,4 @@
-using AuctionRoom.Api.Dtos;
+using AuctionRoom.Api.Services;
 using AuctionRoom.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -37,49 +37,43 @@ public class PoolsController : ControllerBase
     }
 
     /// <summary>
-    /// List players in a pool, optionally filtered by name/team search and
-    /// position. Ordered by total points desc. Used by the auction console.
+    /// List players in a pool, optionally filtered by name/club search, position,
+    /// exact club and a minimum points floor. Ordered by total points desc. Used
+    /// by the auction picker and by shortlist curation.
     /// </summary>
     [HttpGet("{poolId:guid}/players")]
     public async Task<IActionResult> ListPlayers(
         Guid poolId,
         [FromQuery] string? search,
         [FromQuery] string? position,
+        [FromQuery] string? club,
+        [FromQuery] int? minPoints,
         [FromQuery] int take = 50,
         CancellationToken ct = default)
     {
-        take = Math.Clamp(take, 1, 600);
+        var query = PlayerQuery.Filter(
+            _db.Players.Where(p => p.PoolId == poolId),
+            search, position, club, minPoints);
 
-        var query = _db.Players.Where(p => p.PoolId == poolId);
+        return Ok(await PlayerQuery.ToResponsesAsync(query, take, ct));
+    }
 
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var term = search.Trim();
-            query = query.Where(p =>
-                EF.Functions.ILike(p.Name, $"%{term}%") ||
-                (p.Team != null && EF.Functions.ILike(p.Team, $"%{term}%")));
-        }
-
-        if (!string.IsNullOrWhiteSpace(position) &&
-            Enum.TryParse<Domain.PlayerPosition>(position, ignoreCase: true, out var pos))
-        {
-            query = query.Where(p => p.Position == pos);
-        }
-
-        var players = await query
-            .OrderByDescending(p => p.TotalPoints)
-            .Take(take)
-            .Select(p => new PlayerResponse(
-                p.Id,
-                p.ExternalId,
-                p.Name,
-                p.Team,
-                p.Position.ToString(),
-                p.PhotoUrl,
-                p.TotalPoints,
-                p.EventPoints))
+    /// <summary>
+    /// Distinct club names in a pool, alphabetical. Feeds the club filter on the
+    /// shortlist screen, which must offer exactly the names the data actually
+    /// holds — FPL's own spellings, not a hardcoded list that goes stale on
+    /// promotion and relegation.
+    /// </summary>
+    [HttpGet("{poolId:guid}/clubs")]
+    public async Task<IActionResult> ListClubs(Guid poolId, CancellationToken ct)
+    {
+        var clubs = await _db.Players
+            .Where(p => p.PoolId == poolId && p.Team != null)
+            .Select(p => p.Team!)
+            .Distinct()
+            .OrderBy(name => name)
             .ToListAsync(ct);
 
-        return Ok(players);
+        return Ok(clubs);
     }
 }

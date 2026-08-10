@@ -14,8 +14,13 @@ public class AuctionValidationException : Exception
 public class AuctionService
 {
     private readonly AuctionDbContext _db;
+    private readonly ShortlistService _shortlist;
 
-    public AuctionService(AuctionDbContext db) => _db = db;
+    public AuctionService(AuctionDbContext db, ShortlistService shortlist)
+    {
+        _db = db;
+        _shortlist = shortlist;
+    }
 
     /// <summary>
     /// Record that a player was sold to a participant at a price. Validates
@@ -46,6 +51,13 @@ public class AuctionService
             ?? throw new AuctionValidationException("Player not found.");
         if (room.PlayerPoolId is Guid poolId && player.PoolId != poolId)
             throw new AuctionValidationException("Player is not in this room's pool.");
+
+        // If the host curated a shortlist, the auction is confined to it. An
+        // empty shortlist means no curation happened, so the whole pool stays
+        // auctionable — rooms that predate shortlisting are unaffected. Swaps
+        // deliberately ignore this; see ShortlistEntry.
+        if (!await _shortlist.IsAuctionableAsync(roomId, playerId, ct))
+            throw new AuctionValidationException("Player is not on this room's auction shortlist.");
 
         // Player must not already be sold in this room.
         var alreadySold = await _db.AuctionResults

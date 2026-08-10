@@ -3,6 +3,7 @@ using System;
 using AuctionRoom.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AuctionRoom.Infrastructure.Migrations
 {
     [DbContext(typeof(AuctionDbContext))]
-    partial class AuctionDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260809152858_AddPlayerDetailFields")]
+    partial class AddPlayerDetailFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -344,31 +347,6 @@ namespace AuctionRoom.Infrastructure.Migrations
                     b.ToTable("Rooms");
                 });
 
-            modelBuilder.Entity("AuctionRoom.Domain.ShortlistEntry", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("AddedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("PlayerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("RoomId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PlayerId");
-
-                    b.HasIndex("RoomId", "PlayerId")
-                        .IsUnique();
-
-                    b.ToTable("ShortlistEntries");
-                });
-
             modelBuilder.Entity("AuctionRoom.Domain.Swap", b =>
                 {
                     b.Property<Guid>("Id")
@@ -549,25 +527,6 @@ namespace AuctionRoom.Infrastructure.Migrations
                     b.Navigation("Host");
 
                     b.Navigation("PlayerPool");
-                });
-
-            modelBuilder.Entity("AuctionRoom.Domain.ShortlistEntry", b =>
-                {
-                    b.HasOne("AuctionRoom.Domain.Player", "Player")
-                        .WithMany()
-                        .HasForeignKey("PlayerId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("AuctionRoom.Domain.Room", "Room")
-                        .WithMany()
-                        .HasForeignKey("RoomId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Player");
-
-                    b.Navigation("Room");
                 });
 
             modelBuilder.Entity("AuctionRoom.Domain.Swap", b =>

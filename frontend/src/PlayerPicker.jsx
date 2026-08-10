@@ -1,18 +1,34 @@
 import { useEffect, useState } from 'react';
-import { getPoolPlayers } from './api';
+import { getRoomPlayers } from './api';
+import { POSITIONS, formatPrice } from './fpl';
+import { PlayerFigures, PlayerIdent, PlayerPhoto, StatusBadge } from './player';
 
-const POSITIONS = ['Goalkeeper', 'Defender', 'Midfielder', 'Forward'];
+function Stat({ label, value }) {
+  return (
+    <div className="p-stat">
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
+  );
+}
 
 /**
- * Search the room's player pool and pick who is being auctioned.
+ * Search the players this room can auction and pick who is on the block.
  *
- * Already-sold players are filtered out client-side: the pool endpoint has no
+ * The search hits the room's endpoint, not the pool's, so if the host curated a
+ * shortlist only those players appear. An uncurated room sees the whole pool.
+ *
+ * Already-sold players are filtered out client-side: the endpoint has no
  * per-room notion of ownership, and the sold list is small enough (<= squad
  * size x participants) that filtering here is cheaper than a new endpoint.
  * The server still rejects a duplicate sale, so this is convenience, not
  * enforcement.
+ *
+ * Every stat shown comes straight from FPL. Before the season's first gameweek
+ * they still hold last season's figures, which is exactly what a bidder wants
+ * to judge a player on.
  */
-export default function PlayerPicker({ poolId, soldPlayerIds, selected, onSelect }) {
+export default function PlayerPicker({ roomCode, poolId, shortlisted, soldPlayerIds, selected, onSelect }) {
   const [search, setSearch] = useState('');
   const [position, setPosition] = useState('');
   const [players, setPlayers] = useState([]);
@@ -27,7 +43,7 @@ export default function PlayerPicker({ poolId, soldPlayerIds, selected, onSelect
     const t = setTimeout(async () => {
       setLoading(true);
       try {
-        const found = await getPoolPlayers(poolId, { search, position, take: 25 });
+        const found = await getRoomPlayers(roomCode, { search, position, take: 25 });
         if (!cancelled) {
           setPlayers(found);
           setError(null);
@@ -40,7 +56,7 @@ export default function PlayerPicker({ poolId, soldPlayerIds, selected, onSelect
     }, 250);
 
     return () => { cancelled = true; clearTimeout(t); };
-  }, [poolId, search, position]);
+  }, [roomCode, poolId, search, position]);
 
   if (!poolId) {
     return <p className="error">This room has no player pool linked.</p>;
@@ -71,26 +87,54 @@ export default function PlayerPicker({ poolId, soldPlayerIds, selected, onSelect
       {error && <p className="error" role="alert">{error}</p>}
 
       {selected && (
-        <p className="chosen">
-          Auctioning: <strong>{selected.name}</strong>
-          <span className="chosen-meta">{selected.team} · {selected.position}</span>
-          <button type="button" onClick={() => onSelect(null)} aria-label="Clear selection">
+        <div className="chosen-card">
+          <PlayerPhoto player={selected} size="lg" />
+
+          <div className="chosen-body">
+            <p className="chosen-name">
+              <strong>{selected.name}</strong>
+              <StatusBadge player={selected} />
+            </p>
+            <p className="chosen-meta">
+              {[
+                selected.team,
+                selected.position,
+                selected.age != null ? `${selected.age} yrs` : null,
+                formatPrice(selected.nowCost),
+              ].filter(Boolean).join(' · ')}
+            </p>
+
+            <dl className="p-stats">
+              <Stat label="Points" value={selected.totalPoints} />
+              <Stat label="Per game" value={selected.pointsPerGame} />
+              <Stat label="Minutes" value={selected.minutes} />
+              <Stat label="Starts" value={selected.starts} />
+              <Stat label="Goals" value={selected.goalsScored} />
+              <Stat label="Assists" value={selected.assists} />
+            </dl>
+          </div>
+
+          <button type="button" onClick={() => onSelect(null)}>
             Change
           </button>
-        </p>
+        </div>
       )}
 
       {!selected && (
         <ul className="results" aria-busy={loading}>
           {available.length === 0 && !loading && (
-            <li className="empty">No unsold players match.</li>
+            <li className="empty">
+              {shortlisted
+                ? 'No unsold players match, within this room’s shortlist.'
+                : 'No unsold players match.'}
+            </li>
           )}
           {available.map((p) => (
             <li key={p.id}>
               <button type="button" onClick={() => onSelect(p)}>
-                <span className="p-name">{p.name}</span>
-                <span className="p-meta">{p.team} · {p.position}</span>
-                <span className="p-pts">{p.totalPoints} pts</span>
+                <PlayerPhoto player={p} size="sm" />
+                <PlayerIdent player={p} />
+                <PlayerFigures player={p} />
               </button>
             </li>
           ))}

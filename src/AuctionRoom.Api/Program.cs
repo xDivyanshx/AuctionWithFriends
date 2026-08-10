@@ -31,6 +31,7 @@ builder.Services.AddScoped<RoomService>();
 builder.Services.AddScoped<AuctionService>();
 builder.Services.AddScoped<StandingsService>();
 builder.Services.AddScoped<SwapService>();
+builder.Services.AddScoped<ShortlistService>();
 builder.Services.AddScoped<CallerContext>();
 
 // --- CORS ---
