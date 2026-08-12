@@ -129,7 +129,7 @@ public sealed class SwapScenario : IAsyncDisposable
             HostId = aliceUser.Id,
             Sport = Sport.Football,
             Season = "test",
-            Status = RoomStatus.Active,
+            Status = RoomStatus.War,
             PlayerPool = pool,
             PlayerPoolId = pool.Id,
             Config = new RoomConfig { Budget = 100, SquadSize = 15, BestN = 11 }
@@ -192,7 +192,14 @@ public sealed class SwapScenario : IAsyncDisposable
             await db.Swaps.Where(s => s.RoomId == Room.Id).ExecuteDeleteAsync();
             await db.AuditEvents.Where(a => a.RoomId == Room.Id).ExecuteDeleteAsync();
             await db.AuctionResults.Where(r => r.RoomId == Room.Id).ExecuteDeleteAsync();
+            await db.ShortlistEntries.Where(s => s.RoomId == Room.Id).ExecuteDeleteAsync();
+            await db.AuctionPasses.Where(p => p.RoomId == Room.Id).ExecuteDeleteAsync();
             await db.Participants.Where(p => p.RoomId == Room.Id).ExecuteDeleteAsync();
+            // Clear the nomination before deleting players: the FK is SetNull, but
+            // the room row goes first anyway — this keeps the order honest if that
+            // ever changes.
+            await db.Rooms.Where(r => r.Id == Room.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.CurrentNominationPlayerId, (Guid?)null));
             await db.Rooms.Where(r => r.Id == Room.Id).ExecuteDeleteAsync();
 
             var poolId = Pool[0].PoolId;

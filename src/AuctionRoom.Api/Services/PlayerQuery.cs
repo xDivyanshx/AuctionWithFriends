@@ -58,6 +58,20 @@ public static class PlayerQuery
     }
 
     /// <summary>
+    /// One player, mapped exactly as the picker's list rows are. Delegates to
+    /// <see cref="ToResponsesAsync"/> rather than repeating the projection, so the
+    /// nomination card and the search results can never disagree about a field.
+    /// </summary>
+    public static async Task<PlayerResponse?> ToResponseAsync(
+        IQueryable<Player> players,
+        Guid playerId,
+        CancellationToken ct = default)
+    {
+        var rows = await ToResponsesAsync(players.Where(p => p.Id == playerId), 1, ct);
+        return rows.Count > 0 ? rows[0] : null;
+    }
+
+    /// <summary>
     /// Materialise a page of results, highest scorers first. Age is computed in
     /// memory because the birthday adjustment does not translate to SQL.
     /// </summary>

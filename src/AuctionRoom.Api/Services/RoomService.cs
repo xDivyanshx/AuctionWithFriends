@@ -76,7 +76,11 @@ public class RoomService
         return (room, hostParticipant, hostUser);
     }
 
-    /// <summary>Join an existing room.</summary>
+    /// <summary>
+    /// Join an existing room. Only possible in Setup: once the auction starts the
+    /// participant list is fixed, because budgets, squads and the nomination pool
+    /// were all sized to the people who were there at the start.
+    /// </summary>
     public async Task<(Room room, Participant participant, User user)> JoinRoomAsync(
         string roomCode,
         string userName,
@@ -88,6 +92,15 @@ public class RoomService
             .FirstOrDefaultAsync(r => r.Code == roomCode, ct)
             ?? throw new InvalidOperationException("Room not found.");
 
+        // AuctionValidationException, not InvalidOperationException: the room was
+        // found, so the controller's "not found → 404" catch would be wrong here.
+        // A refused join is a rule violation like any other, and answers 400.
+        if (room.Status != RoomStatus.Setup)
+            throw new AuctionValidationException(
+                room.Status == RoomStatus.Auction
+                    ? "This room's auction has already started."
+                    : "This room's auction is over; no one can join now.");
+
         // Find or create user.
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Name == userName, ct);
         if (user is null)
@@ -96,11 +109,19 @@ public class RoomService
             _db.Users.Add(user);
         }
 
-        // Check if already joined.
+        // Check if already joined. Returning the existing participant keeps a
+        // rejoin idempotent, and it must be checked *before* the cap: the tenth
+        // participant reopening the page is not an eleventh.
         var existing = await _db.Participants
             .FirstOrDefaultAsync(p => p.RoomId == room.Id && p.UserId == user.Id, ct);
         if (existing != null)
             return (room, existing, user);
+
+        // CLAUDE.md §3 caps a room at 10. Never enforced anywhere until now.
+        var count = await _db.Participants.CountAsync(p => p.RoomId == room.Id, ct);
+        if (count >= RoomLifecycleService.MaxParticipants)
+            throw new AuctionValidationException(
+                $"This room is full ({RoomLifecycleService.MaxParticipants} participants).");
 
         // Create participant.
         var participant = new Participant

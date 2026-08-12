@@ -1,7 +1,7 @@
 # AuctionRoom — Fantasy Football Auction & Standings Platform
 
 > This file is the single source of truth for architecture and decisions.
-> Keep it updated as decisions change. Last updated: 2026-08-11.
+> Keep it updated as decisions change. Last updated: 2026-08-12.
 
 ## 1. Product Overview
 
@@ -20,21 +20,34 @@ Sport: **Premier League football now.** IPL cricket later as a separate room typ
 
 - **Phase:** post-MVP feature work. The MVP is feature-complete, deployed and
   syncing daily (Phases 4–7: backend, standings page, auction console, deployment,
-  cron). Now working through a 5-phase enhancement plan: Phase 1 (player detail)
-  and Phase 2 (auction shortlist) are done; Phases 3–5 remain.
+  cron). Now working through a 5-phase enhancement plan: Phase 1 (player detail),
+  Phase 2 (auction shortlist) and Phase 3 (auction lifecycle + weighted
+  nomination) are done; Phases 4–5 remain.
 - **What exists:**
   - Solution scaffold: Api (.NET 10), Domain, Infrastructure, Tests
   - All domain entities with updated transaction model (1-for-1 swaps, refund+acquire money)
-  - EF Core DbContext + 5 migrations applied to Neon: InitialCreate, AddHoldings,
-    AddHoldingAcquisitionPrice, AddPlayerDetailFields, AddShortlistEntries
-  - **RoomService**: create room, join room, get room state (with squad counts loaded)
-  - **AuctionService**: record result (budget/squad/player-exists/pool validation), undo last, get results
+  - EF Core DbContext + 6 migrations applied to Neon: InitialCreate, AddHoldings,
+    AddHoldingAcquisitionPrice, AddPlayerDetailFields, AddShortlistEntries,
+    AddAuctionNomination
+  - **RoomService**: create room, join room (refused past `Setup`, 10-participant
+    cap), get room state (with squad counts loaded)
+  - **RoomLifecycleService**: the explicit `Setup → Auction → War` transitions —
+    start auction (≥2 participants), next round, end auction (warn-and-allow on
+    under-filled squads)
+  - **NominationService**: the weighted draw — candidate set is
+    auctionable − owned − passed-this-round, weight `NowCost^k` with `k = 6`
+  - **AuctionService**: record result (budget/squad/player-exists/pool/shortlist
+    validation, `Auction` status only), undo last (also `Auction` only), get results
   - **SwapService**: 1-for-1 unsold-pool and P2P swaps with frozen-points inheritance, weekend-only
-    (IST), monthly per-participant cap, 1-month per-player cooldown, full budget validation
+    (IST), monthly per-participant cap, 1-month per-player cooldown, full budget validation,
+    `War` status only
   - **CallerContext**: lightweight host-only enforcement via `X-User-Id` header
-  - **RoomsController**: POST create, POST join, GET room state
-  - **AuctionController**: POST record, POST undo, GET results — host-only enforced
+  - **RoomsController**: POST create, POST join, GET room state, POST start-auction
+  - **AuctionController**: POST record, POST undo, GET results, POST nominate,
+    POST pass, POST next-round, POST end, GET passed — host-only enforced
   - **SwapsController**: POST unsold, POST p2p, GET all swaps — host-only enforced
+  - **AuctionPass** entity: round-scoped record of a player nobody bid on, unique
+    on `(RoomId, PlayerId, Round)`; round 2 requeues round 1's passes.
   - **Holding** entity: live squad ownership with `AcquisitionPoints`, `InheritedPoints`, and
     `AcquisitionPrice` for frozen-at-swap scoring and correct refunds. Record opens a Holding;
     undo closes it; swaps repoint slots with inheritance.
@@ -55,10 +68,13 @@ Sport: **Premier League football now.** IPL cricket later as a separate room typ
     (host-only batch add/remove). See the Phase 2 bullet below.
   - **StandingsController**: GET standings, GET participant squad.
   - New rooms auto-link to the shared FPL pool.
-  - **Tests (AuctionRoom.Tests)**: 19 xUnit tests against real Neon Postgres with fake clock
+  - **Tests (AuctionRoom.Tests)**: 60 xUnit tests against real Neon Postgres with fake clock
     covering swap money (refund+acquire), frozen-points inheritance, weekend gate (IST timezone),
-    monthly cap, per-player cooldown, budget validation, ownership checks, and P2P unique-index
-    handling. All pass. Test cleanup verified.
+    monthly cap, per-player cooldown, budget validation, ownership checks, P2P unique-index
+    handling, and the Phase 3 lifecycle (every illegal transition, record/undo refused outside
+    `Auction`, swaps refused outside `War`, join refused past `Setup`, the 11th join, pass →
+    round-2 requeue, nominate idempotency, seeded-draw reproducibility). All pass. Test cleanup
+    verified.
   - Clean build, zero warnings
 - **Verified against Neon:** Full auction→standings→swaps chain with real FPL players and live DB.
   create room → host auto-join → second player joins → record auction buys → Holdings created →
@@ -72,11 +88,15 @@ Sport: **Premier League football now.** IPL cricket later as a separate room typ
     `X-User-Id` sent from the stored session), `session.js` (localStorage
     identity: userId, roomCode, participantId, isHost), `App.jsx` (session-based
     routing: Home → console ⇄ standings ⇄ shortlist), `Home.jsx` (create or join
-    a room), `AuctionConsole.jsx` (host records/undoes; everyone sees live
-    budgets and squads, 4s poll; host gets a Shortlist button showing the count),
+    a room), `AuctionConsole.jsx` (status-aware: `Setup` lobby with Start,
+    `Auction` with the on-the-block card / draw / sale / pass / round controls /
+    end-auction confirm step, `War` read-only; host records and undoes, everyone
+    sees live budgets and squads on a 4s poll; host gets a Shortlist button
+    showing the count),
     `PlayerPicker.jsx` (debounced search over the room's auctionable slice, sold
-    players filtered out, photo + age + club + position + price + last-season
-    stats per player, injury badge, initials fallback via `PlayerPhoto`),
+    players filtered out, passed players badged Unsold, photo + age + club +
+    position + price + last-season stats per player, injury badge, initials
+    fallback via `PlayerPhoto`),
     `ShortlistManager.jsx` (host curates the auction pool: club/position/
     min-points filters, per-row toggle, bulk add/remove all shown),
     `Standings.jsx` (leaderboard, drill-down; accepts
@@ -168,18 +188,75 @@ Sport: **Premier League football now.** IPL cricket later as a separate room typ
   server state untouched. 19/19 backend tests, lint and production build clean.
   All fixtures were tagged `season: "test"` and torn down; the shared pool
   (1 pool, 577 players) and the 2 real rooms were verified intact afterwards.
-- **Next:** Phase 3 (end auction → `War`), Phase 4 (host swap screen),
-  Phase 5 (tests). Still outstanding on the user's side: rotate the Neon
-  `neondb_owner` password and update it in Render + local
-  `dotnet user-secrets`.
+- **Phase 3 done (2026-08-11): explicit auction lifecycle + weighted-random
+  nomination.** Creating a room used to drop the host straight into a recordable
+  auction — `AuctionService` flipped `Setup → Auction` on the *first sale*, so
+  status was a side effect rather than a decision. The auction now has a start,
+  an end, and a server that decides who goes up next.
+  - `RoomStatus.Active` renamed to **`War`** (no migration needed — the enum
+    persists as a string; zero rows held the old literal, checked first).
+    `Room.CurrentNominationPlayerId` + `Room.AuctionRound` and the
+    `AuctionPasses` table arrived in migration `AddAuctionNomination`.
+  - **NominationService**: candidate set = auctionable − owned − passed-this-round
+    (the same expression in both rounds), weight `Math.Max(1, NowCost)^k`,
+    `k = RoomConfig.NominationPower = 6`. `Random` is injected as a singleton so a
+    seeded draw reproduces, mirroring the `TimeProvider` precedent.
+  - **RoomLifecycleService** + five host-only routes: `start-auction` (≥2
+    participants, closes joining), `auction/nominate` (idempotent — returns the
+    open nomination rather than re-rolling), `auction/pass`, `auction/next-round`
+    (1 → 2 only), `end-auction` (409 + `{warnings}` on under-filled squads,
+    `{confirm: true}` to proceed). Plus `GET auction/passed` for the Unsold badge.
+  - Six existing status sites fixed: the implicit flip deleted, record and undo
+    require `Auction`, `SwapService` flipped from a `Completed`-only denylist to a
+    `War`-only allowlist, and join is refused past `Setup` with the 10-participant
+    cap from §3 finally enforced.
+  - **Frontend**: `AuctionConsole` branches on status (lobby / auction / war),
+    renders the drawn player on the block, and `PlayerPicker` stays available as a
+    manual override that shows passed players badged Unsold.
+- **Verified (Phase 3):** four harnesses, all green.
+  **60/60 backend tests** against live Neon.
+  **87/87 API contract assertions** — all five new routes 403 to a non-host and to
+  an anonymous caller with a before/after snapshot proving the refusals changed
+  nothing; the full happy path Setup → start → nominate/sell/pass → next-round →
+  end → War; record/nominate/undo refused in `War`; swaps refused in `Setup` and
+  `Auction` but past the gate in `War`; join refused once started; the 11th join
+  refused; nominate idempotent; a passed player never redrawn in the same round
+  but requeued in round 2; 409-then-confirm including that the 409 leaves the room
+  in `Auction`; 404s on unknown rooms.
+  **99/99 jsdom assertions** with effects running — all three status branches,
+  Start disabled under 2 participants, the nomination card arriving on a viewer's
+  poll, the sale/undo/round controls, the confirm step naming both short teams,
+  the manual picker offering a passed player badged Unsold, and an exhausted round
+  reading as a notice rather than an error.
+  **Draw distribution over 10,000 seeded draws** on the real 577-player pool:
+  per-player probability by price band declines monotonically at every `k` tested
+  (at `k=6`: 241.8 / 11.8 / 3.1 / 0.95 / 0.31 per 1000), the full-auction decile
+  curve declines, a top-20 player comes up first 64% of the time (top-50: 72%),
+  52% of the top 20 are nominated inside the first 40 draws, and both £10m+
+  players are up by draw ~8.
+  Lint and production build clean. All fixtures tagged `season: "test"` and torn
+  down; afterwards the shared pool (1 pool, 577 players) and the user's 4 real
+  rooms were verified intact, with zero orphan rows in every `RoomId` table.
+- **Next:** Phase 4 (host swap screen), Phase 5 (tests). Still outstanding on the
+  user's side: rotate the Neon `neondb_owner` password and update it in Render +
+  local `dotnet user-secrets`.
 
 ## 3. Finalized Requirements
 
 ### Auction recording (manual entry by host)
+- The host **starts** the auction explicitly (`Setup → Auction`, needs ≥2 teams)
+  and **ends** it explicitly (`Auction → War`). Joining closes at the start.
+- Who goes up next is **drawn by the server, weighted by FPL price** so the
+  expensive players come up early and the tail collapses fast — random, but not
+  uniform, and not host-chosen. The host can still put someone up by hand.
+- **Two rounds**: the main round, then one unsold round for everything still
+  unsold when the host ends round 1. The host decides when that is.
 - Results shown to all participants **immediately**.
 - Host can **undo the last recorded result** (1 step back).
 - **Everyone always sees**: every participant's remaining budget + squad built so far.
 - Validation: a participant cannot be assigned a player they can't afford.
+- Ending with any squad under the configured size **warns and allows** — the host
+  confirms rather than being blocked.
 
 ### Teams & scoring
 - Participants do **not** pick a playing XI.
@@ -250,15 +327,20 @@ transaction involves releasing one owned player AND acquiring another.
 
 ### MVP (must have)
 - Create room with a unique code; sport = football.
-- Join room with a team name (no password required).
+- Join room with a team name (no password required) — `Setup` only, max 10.
 - Room config: budget, squad size (e.g. 15), best-N-for-scoring (e.g. 11),
-  optional team constraints (max from same real club, position min/max).
+  the nomination price exponent (default 6), optional team constraints (max from
+  same real club, position min/max).
 - Select/import a player pool (FPL players — see §6).
 - **Auction shortlist**: host optionally curates which slice of the shared pool
   this room auctions (filters by club / position / min points). Auction-only —
   it does not restrict swaps. Empty = the whole pool is auctionable.
-- **Auction recording flow** (one-time event): next player → pick winner →
-  enter price → confirm → budgets update → visible to all immediately.
+- **Auction lifecycle**: host starts the auction, runs the main round and one
+  unsold round, then ends it (`Setup → Auction → War`), warned if any squad is
+  short.
+- **Auction recording flow** (one-time event): draw the next player (weighted by
+  price, or pick by hand) → pick winner → enter price → confirm → budgets update →
+  visible to all immediately. Nobody bid → passed, requeued in the unsold round.
 - **Undo last recorded result** (1 step).
 - Live view for all: every participant's remaining budget + squad so far.
 - Daily points sync from FPL API.
@@ -343,7 +425,8 @@ Sync job runs daily ~22:00, upserts player points, then recomputes standings
 ```
 users            id, name, (email?, password_hash? later), created_at
 rooms            id, code(unique), name, host_id, sport('football'),
-                 season, status('setup'|'auction'|'active'|'completed'),
+                 season, status('Setup'|'Auction'|'War'|'Completed'),
+                 current_nomination_player_id(nullable), auction_round(1|2),
                  config JSONB, created_at
 participants     id, room_id, user_id, team_name, budget_remaining,
                  total_points, best_xi_points, rank, last_swap_month (YYYY-MM),
@@ -356,6 +439,9 @@ auction_results  id, room_id, player_id, participant_id, purchase_price,
                  sequence_number, created_at   UNIQUE(room_id, player_id)
 shortlist_entries id, room_id, player_id, added_at   UNIQUE(room_id, player_id)
                  (empty for a room = whole pool auctionable)
+auction_passes   id, room_id, player_id, round, passed_at
+                 UNIQUE(room_id, player_id, round)
+                 (round-scoped, so round 2 requeues round 1's passes)
 swaps            id, room_id, type('ParticipantToParticipant'|'UnsoldPool'),
                  participant_id, counterparty_participant_id(nullable),
                  player_out_id, player_in_id,
@@ -371,22 +457,33 @@ Notes:
   `best_xi_points` + `rank` on `participants` for fast reads; recompute on sync.
 - Ownership changes only via `auction_results` (initial) and `swaps` (edits).
 - `audit_events` records undo, swaps, and result edits for traceability.
+- `config` also holds `nominationPower` (the draw's price exponent, default 6),
+  so it is tunable per room without a migration.
 
 ## 8. API Structure (REST, Next.js Route Handlers)
 
 ```
 POST   /api/rooms                         create room
 GET    /api/rooms/:code                   room details + participants + config
-POST   /api/rooms/:code/join              join (team name)
-PATCH  /api/rooms/:code/status            host: setup->auction->active->completed
+                                          + nomination + auction_round
+POST   /api/rooms/:code/join              join (team name; Setup only, max 10)
+POST   /api/rooms/:code/start-auction     host: Setup -> Auction (needs >=2 teams)
+POST   /api/rooms/:code/end-auction       host: Auction -> War; 409 + {warnings}
+                                          on short squads, {confirm:true} to force
 
 GET    /api/rooms/:code/auction           current player + remaining pool + results
 POST   /api/rooms/:code/auction/record    host: {playerId, participantId, price}
 POST   /api/rooms/:code/auction/undo      host: undo last result
+POST   /api/rooms/:code/auction/nominate  host: weighted draw (idempotent; 204 when
+                                          the round has nobody left)
+POST   /api/rooms/:code/auction/pass      host: nobody bid — record a round pass
+POST   /api/rooms/:code/auction/next-round host: round 1 -> 2 (requeues passes)
+GET    /api/rooms/:code/auction/passed    passed player ids for the current round
 GET    /api/rooms/:code/shortlist         shortlisted player ids + count + curated
 GET    /api/rooms/:code/shortlist/players the room's auctionable slice (filterable)
 POST   /api/rooms/:code/shortlist         host: {add[], remove[]} batch edit
-POST   /api/rooms/:code/swaps             host: record a swap (weekend + cooldown checked)
+POST   /api/rooms/:code/swaps             host: record a swap (War only; weekend +
+                                          cooldown checked)
 
 GET    /api/rooms/:code/standings         leaderboard (derived best-N)
 GET    /api/rooms/:code/participants/:id  squad + per-player contributions
@@ -639,5 +736,84 @@ Design is finalized. No open blockers.
   Optimistic state has to be observed inside a synchronous `act()` — the default
   click helper's 400 ms settle is long enough for a localhost 403 to arrive and
   revert it first.
+- 2026-08-11: **Status was a side effect; now it is a decision.** `AuctionService`
+  flipped `Setup → Auction` on the first sale, so a freshly created room already
+  showed a recordable sale form — which is how the user found this by hand. Making
+  the transition explicit exposed three more holes that all shared the same root
+  cause, *nothing else in the codebase read status*: `SwapService` blocked only
+  `Completed` (a denylist, so swaps were legal mid-auction), `JoinRoomAsync`
+  checked neither status nor the 10-participant cap from §3, and `UndoLastAsync`
+  loaded no room at all. A denylist over a status enum is a standing bug — every
+  status added later is permitted by default. All three are allowlists now.
+- 2026-08-11: **`Active` → `War` needed no migration, but did need a check.** The
+  enum persists as a string via `HasConversion<string>()`, so renaming a member is
+  a code-only change — except any row already holding the literal `'Active'` would
+  become unreadable on read. Counted first (`SELECT status, count(*) FROM rooms
+  GROUP BY status`): zero, as expected, since only the test fixture ever wrote it.
+  The check cost one query; skipping it would have risked silent data loss.
+- 2026-08-11: **The nomination lives on the room, not the client.** Ten browsers
+  on a 4s poll must agree on who is on the block, so the drawn player is
+  `Room.CurrentNominationPlayerId` and `POST nominate` is **idempotent** — an open
+  nomination is returned, not replaced. That kills two failure modes at once: the
+  poll cannot race itself into a double draw, and the host cannot re-roll until a
+  name they like comes up. An exhausted round answers **204**, which the console
+  reads as a cue ("nothing left to draw") rather than an error — the round ending
+  is a normal event, not a fault.
+- 2026-08-11: **Decline is emergent, so the draw needs one knob, not two.**
+  `P(player) ∝ Math.Max(1, NowCost)^k` with `k = 6`. No explicit time-decay term:
+  expensive players are likely to be drawn early, so they *leave* the pool early,
+  so the remaining pool's mean price falls by itself. A progress multiplier would
+  be a second knob doing the same job. Tuned against the real 577-player pool over
+  10,000 seeded draws rather than guessed — at `k=6` the per-player probability by
+  price band declines monotonically (241.8 / 11.8 / 3.1 / 0.95 / 0.31 per 1000), a
+  top-20 player comes up first 64% of the time, and both £10m+ players are up by
+  draw ~8. Higher `k` approaches a strict descending order, which the user
+  explicitly did not want. Two measurements were misleading on their own and are
+  worth remembering: raw band *totals* make the cheap band look dominant (it holds
+  360 of 577 players, so mass piles up there by count alone), and the whole-pool
+  decile curve looks flat because the pool *is* flat — 360 players sit under £5.5m
+  against a £4.0m floor. Per-player probability and top-of-market clearance inside
+  the first ~150 draws are the honest measures, because a real auction sells at
+  most ~150 players and the host ends round 1 long before the pool empties.
+- 2026-08-11: **Two rounds, host-ended, meant no second pool.** Letting the host
+  end round 1 early makes "unsold" self-defining: everything not sold at that
+  moment — passed *or* never nominated — is equally unsold, so round 2's candidate
+  set is the same expression as round 1's with passes scoped by round number. One
+  integer on the room and a `Round` column on `AuctionPasses`, instead of a
+  separate unsold pool. The cheapest version of what was asked for was also the
+  most faithful one.
+- 2026-08-11: **409 is not a refusal.** Ending an auction with under-filled squads
+  answers `409 + {error, warnings[]}` and the console renders it as a **confirm
+  step**, not an error box — same request, asked back with its consequences
+  attached, and `{confirm: true}` proceeds. The alternative offered (hard-block
+  until every squad is full) was cheaper by about six lines and would have removed
+  a legitimate outcome: an auction where someone genuinely came up short.
+- 2026-08-11: **The weighted draw did not replace the manual picker.** `record`
+  still accepts *any* auctionable unsold player, so the picker needs no second
+  code path and the host can put someone up out of turn. A hand-picked player
+  overrides the drawn one for display without clearing the nomination, so the
+  drawn player is still on the block afterwards. Passed players are deliberately
+  visible there, badged `Unsold` — the picker filters *sold*, not *settled*.
+- 2026-08-11: **A jsdom click on a disabled button is silently swallowed.** Four
+  Phase 3 assertions "failed" against working code for one reason: every host
+  action sets `busy` and clears it in a `finally` that runs one commit *after* the
+  refresh lands, so a `waitFor` on the action's DOM effect (card gone, row added)
+  resolves while the buttons are still disabled. The fix is a `clickReady(label)`
+  helper that waits for existence *and* `!disabled`. Three sibling harness traps
+  from the same session: a node captured before a re-render is detached, so
+  setting its value changes nothing the live form can see (the sale form unmounts
+  when the block clears); `node?.querySelector(x) !== null` passes vacuously when
+  `node` is undefined, so assert with `!!`; and a `textContent.includes('500')`
+  over a whole table cannot fail when every team starts on 500 — assert the row.
+- 2026-08-11: **Teardown predicates must match what the harnesses actually write.**
+  `cleanup.cs` deleted users by `Name == "Bob-e2e"` while the harnesses join as
+  `Bob-e2e1`..`Bob-e2e9`, so nine inert user rows survived every previous sweep
+  unnoticed. It also surfaced 25 audit events pointing at rooms deleted in an
+  earlier session — a room deleted without its trail leaves rows no query will
+  ever reach again. Both predicates are now prefix/orphan-based, and the script
+  reports "e2e users left" and "orphan audits left" so the next sweep proves
+  itself rather than asserting nothing survived. Post-Phase-3 state: 0 test rooms,
+  0 orphans in every `RoomId` table, 1 pool / 577 players, and the user's 4 real
+  rooms intact.
 
 

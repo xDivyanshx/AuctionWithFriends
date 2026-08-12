@@ -316,8 +316,19 @@ public class SwapService
     {
         var room = await _db.Rooms.FirstOrDefaultAsync(r => r.Id == roomId, ct)
             ?? throw new AuctionValidationException("Room not found.");
-        if (room.Status == RoomStatus.Completed)
-            throw new AuctionValidationException("Tournament is completed; swaps are closed.");
+
+        // Allowlist, not denylist: swaps exist only after the auction. A room in
+        // Setup or Auction must reject them, or the host could "swap" around the
+        // auction entirely. Completed is unreachable for now — nothing sets it —
+        // but the guard stays for when a season-close is added.
+        if (room.Status != RoomStatus.War)
+            throw new AuctionValidationException(room.Status switch
+            {
+                RoomStatus.Setup => "The auction has not started yet.",
+                RoomStatus.Auction => "Swaps open only after the auction ends.",
+                _ => "This tournament is completed; swaps are closed."
+            });
+
         return room;
     }
 

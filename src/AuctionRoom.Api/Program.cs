@@ -26,9 +26,16 @@ builder.Services.AddDbContext<AuctionDbContext>(o =>
 
 // --- Application services ---
 builder.Services.AddSingleton(TimeProvider.System);
+// Injected for the same reason as TimeProvider: a weighted nomination draw has
+// to be reproducible in a test, which means the RNG cannot be a `new Random()`
+// buried in the service. Random.Shared rather than a fresh instance because
+// Random's instance methods are not thread-safe and this is a singleton.
+builder.Services.AddSingleton(Random.Shared);
 builder.Services.AddHttpClient<FplService>();
 builder.Services.AddScoped<RoomService>();
 builder.Services.AddScoped<AuctionService>();
+builder.Services.AddScoped<NominationService>();
+builder.Services.AddScoped<RoomLifecycleService>();
 builder.Services.AddScoped<StandingsService>();
 builder.Services.AddScoped<SwapService>();
 builder.Services.AddScoped<ShortlistService>();

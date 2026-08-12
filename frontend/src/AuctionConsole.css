@@ -35,14 +35,129 @@
   border-color: transparent;
 }
 
-/* --- host record form --- */
+/* --- stages ---
+   One card per lifecycle status. The auction's sale form sits inside it rather
+   than being its own card, because it is about whoever is on the block above. */
 
-.record {
+.stage {
   padding: 1rem 1.1rem 1.1rem;
   margin-bottom: 2rem;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
+}
+
+.stage-note {
+  margin: 0 0 0.9rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.stage-note strong {
+  letter-spacing: 0.1em;
+  color: var(--fg);
+}
+
+/* Room settings, read-only: four short pairs that wrap on a phone. */
+.config {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.4rem;
+  margin: 0 0 1rem;
+}
+
+.config dt {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+
+.config dd {
+  margin: 0;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* Undo on the left, the round and end controls pushed to the right: destructive
+   and progressive actions should not sit next to each other. */
+.stage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--border);
+}
+
+.stage-actions .spacer {
+  flex: 1 1 auto;
+}
+
+.stage-actions .undo {
+  margin-top: 0;
+}
+
+.draw {
+  margin-top: 0.9rem;
+}
+
+.manual {
+  margin-top: 1rem;
+}
+
+.manual .picker {
+  margin-top: 0.6rem;
+}
+
+/* --- ending with under-filled squads ---
+   A confirm step, not an error: the request came back with its consequences
+   attached, so it is styled as a decision rather than a failure. */
+
+.confirm {
+  margin-top: 1rem;
+  padding: 0.8rem 0.9rem;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: 8px;
+}
+
+.confirm p {
+  margin: 0 0 0.6rem;
+  font-size: 0.9rem;
+  color: var(--danger-fg);
+}
+
+.confirm ul {
+  margin: 0 0 0.8rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.confirm li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.25rem 0;
+}
+
+.confirm li + li {
+  border-top: 1px solid var(--danger-border);
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+/* --- host record form --- */
+
+.record {
+  margin-top: 0.9rem;
 }
 
 .record-row {
@@ -86,7 +201,7 @@
   border-radius: 6px;
 }
 
-.record .primary {
+.console .primary {
   flex: 0 0 auto;
   padding: 0.55rem 1.1rem;
   font: inherit;
@@ -98,14 +213,14 @@
   cursor: pointer;
 }
 
-.record .primary:disabled,
-.record .undo:disabled {
+.console .primary:disabled,
+.console .undo:disabled,
+.console .ghost:disabled {
   opacity: 0.55;
   cursor: default;
 }
 
-.record .undo {
-  margin-top: 0.9rem;
+.console .undo {
   padding: 0.4rem 0.75rem;
   font: inherit;
   font-size: 0.82rem;

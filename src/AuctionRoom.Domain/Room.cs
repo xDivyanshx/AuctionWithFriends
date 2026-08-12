@@ -24,6 +24,22 @@ public class Room
 
     public RoomStatus Status { get; set; } = RoomStatus.Setup;
 
+    /// <summary>
+    /// Which pass of the auction is running: 1 = main, 2 = the unsold round.
+    /// Scopes <see cref="AuctionPass"/> rows, so a player passed over in round 1
+    /// becomes drawable again in round 2 without deleting any history.
+    /// Meaningless outside <see cref="RoomStatus.Auction"/>.
+    /// </summary>
+    public int AuctionRound { get; set; } = 1;
+
+    /// <summary>
+    /// The player currently on the block, or null when nobody is. Server-held on
+    /// purpose: every client polls the room, so this is what makes them all show
+    /// the same name at the same time.
+    /// </summary>
+    public Guid? CurrentNominationPlayerId { get; set; }
+    public Player? CurrentNominationPlayer { get; set; }
+
     /// <summary>Tournament rules. Persisted as a JSON column.</summary>
     public RoomConfig Config { get; set; } = new();
 
@@ -57,6 +73,22 @@ public class RoomConfig
 
     /// <summary>Optional constraints (not enforced in MVP).</summary>
     public SquadConstraints? Constraints { get; set; }
+
+    /// <summary>
+    /// Sharpness of the weighted nomination draw: weight = NowCost^k. The decline
+    /// is emergent — expensive players leave the pool early, so the remaining
+    /// pool's average price falls on its own. k=1 is proportional to price and
+    /// quite flat; k=6 puts most of the mass on the top slice. Tunable without a
+    /// migration because this whole object is a JSON column.
+    ///
+    /// <para>
+    /// 6 was measured, not guessed: against the live 577-player pool it draws a
+    /// top-20-by-price player first 64% of the time, has half the top 20 on the
+    /// block within 40 nominations and 95% within 150, and still leaves 11% of
+    /// first draws to the sub-£5.5m tail. k=7+ starts starving that tail.
+    /// </para>
+    /// </summary>
+    public double NominationPower { get; set; } = 6;
 }
 
 /// <summary>Optional squad constraints — reserved, not enforced in MVP.</summary>

@@ -49,13 +49,22 @@ async function post(path, body, userId) {
 
   if (!res.ok) {
     let message = `Request failed (${res.status}).`;
+    let parsed = null;
     try {
-      const parsed = await res.json();
+      parsed = await res.json();
       if (parsed?.error) message = parsed.error;
     } catch {
       // Non-JSON error body — keep the status-based message.
     }
-    throw new Error(message);
+
+    // Carry the status and the body on the error. Most callers only want the
+    // message, but ending the auction answers 409 with a list of under-filled
+    // squads that the console has to render as a confirm step — and a 409 is
+    // not the same thing as a refusal, so the caller has to be able to tell.
+    const err = new Error(message);
+    err.status = res.status;
+    err.body = parsed;
+    throw err;
   }
 
   // Every current endpoint returns JSON, but tolerate an empty 204 body.
@@ -90,6 +99,41 @@ export const recordResult = (roomCode, payload, userId) =>
 /** POST /api/rooms/{code}/auction/undo (host only) */
 export const undoLast = (roomCode, userId) =>
   post(`${room(roomCode)}/auction/undo`, {}, userId);
+
+/** POST /api/rooms/{code}/start-auction → RoomResponse (host only) */
+export const startAuction = (roomCode, userId) =>
+  post(`${room(roomCode)}/start-auction`, {}, userId);
+
+/**
+ * POST /api/rooms/{code}/end-auction → RoomResponse (host only)
+ *
+ * Called twice in the under-filled case: once bare, which answers 409 with
+ * `{ error, warnings }` on the thrown error's `body`, and again with
+ * `{ confirm: true }` once the host has seen the list.
+ */
+export const endAuction = (roomCode, confirm, userId) =>
+  post(`${room(roomCode)}/end-auction`, { confirm }, userId);
+
+/**
+ * POST /api/rooms/{code}/auction/nominate → PlayerResponse, or null (host only)
+ *
+ * Null means the round is exhausted (the server answers 204), not that anything
+ * went wrong — it is the cue to open the unsold round or end the auction.
+ * Idempotent: repeat calls return whoever is already on the block.
+ */
+export const nominate = (roomCode, userId) =>
+  post(`${room(roomCode)}/auction/nominate`, {}, userId);
+
+/** POST /api/rooms/{code}/auction/pass → { passedPlayerId, round } (host only) */
+export const passPlayer = (roomCode, userId) =>
+  post(`${room(roomCode)}/auction/pass`, {}, userId);
+
+/** POST /api/rooms/{code}/auction/next-round → { round, candidates } (host only) */
+export const nextRound = (roomCode, userId) =>
+  post(`${room(roomCode)}/auction/next-round`, {}, userId);
+
+/** GET /api/rooms/{code}/auction/passed → PassedPlayersResponse */
+export const getPassed = (roomCode) => get(`${room(roomCode)}/auction/passed`);
 
 /** GET /api/pools/{id}/players → PlayerResponse[] */
 export function getPoolPlayers(poolId, filters = {}) {

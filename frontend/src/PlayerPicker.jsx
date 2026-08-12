@@ -1,16 +1,10 @@
 import { useEffect, useState } from 'react';
 import { getRoomPlayers } from './api';
-import { POSITIONS, formatPrice } from './fpl';
-import { PlayerFigures, PlayerIdent, PlayerPhoto, StatusBadge } from './player';
+import { POSITIONS } from './fpl';
+import { PlayerCardBody, PlayerFigures, PlayerIdent, PlayerPhoto } from './player';
 
-function Stat({ label, value }) {
-  return (
-    <div className="p-stat">
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
-  );
-}
+/** Shared empty set so a caller that passes no passed-ids allocates nothing. */
+const NONE = new Set();
 
 /**
  * Search the players this room can auction and pick who is on the block.
@@ -24,11 +18,17 @@ function Stat({ label, value }) {
  * The server still rejects a duplicate sale, so this is convenience, not
  * enforcement.
  *
+ * Players passed over in an earlier round are badged <c>Unsold</c> rather than
+ * hidden: the host may well want to put one back on the block out of order, and
+ * a pass is not a sale.
+ *
  * Every stat shown comes straight from FPL. Before the season's first gameweek
  * they still hold last season's figures, which is exactly what a bidder wants
  * to judge a player on.
  */
-export default function PlayerPicker({ roomCode, poolId, shortlisted, soldPlayerIds, selected, onSelect }) {
+export default function PlayerPicker({
+  roomCode, poolId, shortlisted, soldPlayerIds, passedPlayerIds = NONE, selected, onSelect,
+}) {
   const [search, setSearch] = useState('');
   const [position, setPosition] = useState('');
   const [players, setPlayers] = useState([]);
@@ -90,29 +90,10 @@ export default function PlayerPicker({ roomCode, poolId, shortlisted, soldPlayer
         <div className="chosen-card">
           <PlayerPhoto player={selected} size="lg" />
 
-          <div className="chosen-body">
-            <p className="chosen-name">
-              <strong>{selected.name}</strong>
-              <StatusBadge player={selected} />
-            </p>
-            <p className="chosen-meta">
-              {[
-                selected.team,
-                selected.position,
-                selected.age != null ? `${selected.age} yrs` : null,
-                formatPrice(selected.nowCost),
-              ].filter(Boolean).join(' · ')}
-            </p>
-
-            <dl className="p-stats">
-              <Stat label="Points" value={selected.totalPoints} />
-              <Stat label="Per game" value={selected.pointsPerGame} />
-              <Stat label="Minutes" value={selected.minutes} />
-              <Stat label="Starts" value={selected.starts} />
-              <Stat label="Goals" value={selected.goalsScored} />
-              <Stat label="Assists" value={selected.assists} />
-            </dl>
-          </div>
+          <PlayerCardBody
+            player={selected}
+            badge={passedPlayerIds.has(selected.id) ? <span className="p-unsold">Unsold</span> : null}
+          />
 
           <button type="button" onClick={() => onSelect(null)}>
             Change
@@ -134,6 +115,7 @@ export default function PlayerPicker({ roomCode, poolId, shortlisted, soldPlayer
               <button type="button" onClick={() => onSelect(p)}>
                 <PlayerPhoto player={p} size="sm" />
                 <PlayerIdent player={p} />
+                {passedPlayerIds.has(p.id) && <span className="p-unsold">Unsold</span>}
                 <PlayerFigures player={p} />
               </button>
             </li>

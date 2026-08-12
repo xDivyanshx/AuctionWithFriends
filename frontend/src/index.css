@@ -273,3 +273,24 @@ select:focus-visible {
   color: #8a1220;
   background: #ffd4d9;
 }
+
+/* Auction-state labels, not FPL ones: a player passed over in an earlier round,
+   and one the host put up by hand rather than drawing. Same shape as the
+   availability badge so a row reads as one line of labels. */
+.p-unsold,
+.p-manual {
+  padding: 0.05rem 0.3rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  border-radius: 3px;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.p-manual {
+  color: var(--accent);
+  border-color: var(--accent);
+}

@@ -17,6 +17,7 @@ public class AuctionDbContext : DbContext
     public DbSet<Holding> Holdings => Set<Holding>();
     public DbSet<Swap> Swaps => Set<Swap>();
     public DbSet<ShortlistEntry> ShortlistEntries => Set<ShortlistEntry>();
+    public DbSet<AuctionPass> AuctionPasses => Set<AuctionPass>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
     protected override void OnModelCreating(ModelBuilder b)
@@ -51,6 +52,8 @@ public class AuctionDbContext : DbContext
             e.HasOne(x => x.Host).WithMany().HasForeignKey(x => x.HostId)
                 .OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.PlayerPool).WithMany().HasForeignKey(x => x.PlayerPoolId)
+                .OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.CurrentNominationPlayer).WithMany().HasForeignKey(x => x.CurrentNominationPlayerId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
@@ -135,6 +138,19 @@ public class AuctionDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
             // Restrict, like Holding: a shortlisted player must not be deletable
             // out from under a room that is mid-auction.
+            e.HasOne(x => x.Player).WithMany().HasForeignKey(x => x.PlayerId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        b.Entity<AuctionPass>(e =>
+        {
+            // A player is passed at most once per round; the unique index makes
+            // a race-driven double-pass impossible, so "passed players" always
+            // means a set, not a multiset.
+            e.HasIndex(x => new { x.RoomId, x.PlayerId, x.Round }).IsUnique();
+            e.HasIndex(x => new { x.RoomId, x.Round });
+            e.HasOne(x => x.Room).WithMany().HasForeignKey(x => x.RoomId)
+                .OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Player).WithMany().HasForeignKey(x => x.PlayerId)
                 .OnDelete(DeleteBehavior.Restrict);
         });

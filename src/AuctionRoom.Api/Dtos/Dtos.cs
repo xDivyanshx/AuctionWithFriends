@@ -22,8 +22,23 @@ public record RecordResultRequest(
     Guid ParticipantId,
     int Price);
 
+/// <summary>
+/// Host ends the auction. <paramref name="Confirm"/> false (the default, and what
+/// a bodyless POST deserializes to) asks the server to check first: it answers 409
+/// with the under-filled squads rather than transitioning. Sending it true is the
+/// host saying they have seen that list and want to end anyway.
+/// </summary>
+public record EndAuctionRequest(bool Confirm = false);
+
 // ---------- Responses ----------
 
+/// <summary>
+/// Room state. <paramref name="AuctionRound"/> and <paramref name="Nomination"/>
+/// ride along here rather than on their own endpoint because every client already
+/// polls this every 4s, and who is on the block is exactly what they all have to
+/// agree on. <paramref name="Nomination"/> is null outside the auction and
+/// whenever the block is empty.
+/// </summary>
 public record RoomResponse(
     Guid Id,
     string Code,
@@ -33,7 +48,9 @@ public record RoomResponse(
     Guid HostId,
     RoomConfig Config,
     IReadOnlyList<ParticipantResponse> Participants,
-    Guid? PlayerPoolId);
+    Guid? PlayerPoolId,
+    int AuctionRound,
+    PlayerResponse? Nomination);
 
 public record ParticipantResponse(
     Guid Id,
@@ -60,6 +77,16 @@ public record AuctionResultResponse(
     string TeamName,
     int PurchasePrice,
     int SequenceNumber);
+
+/// <summary>
+/// What the manual picker needs that the 4s room poll should not carry: the ids of
+/// players passed over, so they can be badged <c>Unsold</c>. A late-auction room
+/// can hold a few hundred of these, which is why they are fetched on demand when
+/// the picker opens rather than shipped with every poll.
+/// </summary>
+public record PassedPlayersResponse(
+    int Round,
+    IReadOnlyList<Guid> PassedPlayerIds);
 
 /// <summary>
 /// A player as the auction picker sees them. <paramref name="Age"/> is derived from

@@ -39,8 +39,11 @@ public class AuctionService
         var room = await _db.Rooms.FirstOrDefaultAsync(r => r.Id == roomId, ct)
             ?? throw new AuctionValidationException("Room not found.");
 
-        if (room.Status is not (RoomStatus.Setup or RoomStatus.Auction))
-            throw new AuctionValidationException("Auction is not open for recording.");
+        if (room.Status != RoomStatus.Auction)
+            throw new AuctionValidationException(
+                room.Status == RoomStatus.Setup
+                    ? "The auction has not started. Start it from the room."
+                    : "The auction is over. Squad changes now go through swaps.");
 
         var participant = await _db.Participants
             .FirstOrDefaultAsync(p => p.Id == participantId && p.RoomId == roomId, ct)
@@ -109,9 +112,13 @@ public class AuctionService
 
         participant.BudgetRemaining -= price;
 
-        // Auto-advance status to Auction on first result.
-        if (room.Status == RoomStatus.Setup)
-            room.Status = RoomStatus.Auction;
+        // The sale settles whatever was on the block. Clearing it here (rather
+        // than making the client ask) is what lets every poller see the block go
+        // empty at the same time, and it keeps the manual picker working: a host
+        // who sells someone other than the nominated player leaves the
+        // nomination standing, which is correct — that player is still unsold.
+        if (room.CurrentNominationPlayerId == playerId)
+            room.CurrentNominationPlayerId = null;
 
         _db.AuditEvents.Add(new AuditEvent
         {
@@ -129,6 +136,18 @@ public class AuctionService
     /// <summary>Undo the most recent auction result in a room (host action).</summary>
     public async Task<AuctionResult?> UndoLastAsync(Guid roomId, CancellationToken ct = default)
     {
+        // Undo used to load no room at all, so it stayed available after the
+        // auction ended — where it would refund a buy whose player may since
+        // have been swapped away, silently desyncing budgets from Holdings.
+        var room = await _db.Rooms.FirstOrDefaultAsync(r => r.Id == roomId, ct)
+            ?? throw new AuctionValidationException("Room not found.");
+
+        if (room.Status != RoomStatus.Auction)
+            throw new AuctionValidationException(
+                room.Status == RoomStatus.Setup
+                    ? "The auction has not started."
+                    : "The auction is over; results can no longer be undone.");
+
         var last = await _db.AuctionResults
             .Where(a => a.RoomId == roomId)
             .OrderByDescending(a => a.SequenceNumber)

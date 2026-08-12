@@ -1,11 +1,20 @@
 namespace AuctionRoom.Domain;
 
-/// <summary>Lifecycle of an auction room.</summary>
+/// <summary>
+/// Lifecycle of an auction room. Every transition is an explicit host action;
+/// nothing advances as a side effect of recording a sale.
+///
+/// <para>
+/// Persisted as a string (see AuctionDbContext), so members can be added or
+/// renamed in code without a migration — but a rename orphans rows already
+/// holding the old literal, so check the table first.
+/// </para>
+/// </summary>
 public enum RoomStatus
 {
-    Setup,      // Room created, players joining, pool being configured
-    Auction,    // One-time auction in progress (host recording results)
-    Active,     // Auction done; tournament running, standings updating
+    Setup,      // Room created, players joining, host curating the shortlist
+    Auction,    // Auction running: server nominates, host records sales
+    War,        // Auction done; tournament running, standings updating, swaps open
     Completed   // Tournament over
 }
 
